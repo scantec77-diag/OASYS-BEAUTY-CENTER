@@ -2,6 +2,10 @@ const CALENDAR_ID = '04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTe
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const FIREBASE_WEB_API_KEY = 'AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po';
 const ADMIN_EMAILS = ['oasysbeautycenter@gmail.com'];
+const DEFAULT_SERVICE_STYLES = {
+  nameColor: '#42392E', detailColor: '#766B5D', cardColor: '#FFFDF9',
+  nameFont: 'serif', detailFont: 'system', nameSize: 16, detailSize: 14
+};
 const SETTINGS_KEY = 'OASIS_WEEKLY_SCHEDULE';
 const DEFAULT_STATUS_COLORS = {
   unavailable: '#E5E7EB',
@@ -17,7 +21,9 @@ function doGet(e) {
   }
   const action = String(e.parameter.action || 'availability');
   if (action === 'settings') return jsonp(callback, { ok: true, schedule: getSchedule_() });
-  if (action === 'services') return jsonp(callback, { ok: true, services: getServices_() });
+  if (action === 'services') return jsonp(callback, {
+    ok: true, services: getServices_(), styles: getServiceStyles_()
+  });
   if (action !== 'availability') return jsonp(callback, { ok: false, error: 'invalid_action' });
 
   const date = String(e.parameter.date || '');
@@ -55,9 +61,12 @@ function doPost(e) {
   if (action === 'saveServices') {
     try {
       const services = JSON.parse(String(params.services || '[]'));
+      const styles = JSON.parse(String(params.styles || '{}'));
       validateServices_(services);
+      validateServiceStyles_(styles);
       PropertiesService.getScriptProperties().setProperty('OASIS_SERVICES', JSON.stringify(services));
-      return postResult_(true, 'Lista de servicios guardada.', 'oasis-services-save');
+      PropertiesService.getScriptProperties().setProperty('OASIS_SERVICE_STYLES', JSON.stringify(styles));
+      return postResult_(true, 'Lista y estilos de servicios guardados.', 'oasis-services-save');
     } catch (error) {
       return postResult_(false, 'Revisá los nombres, precios y tiempos de los servicios.', 'oasis-services-save');
     }
@@ -168,6 +177,32 @@ function defaultServices_() {
     { id: 's16', name: 'Alisado medio (hasta los hombros)', price: 35000, fromPrice: false, durationMin: 120 },
     { id: 's17', name: 'Alisado largo (desde los hombros en adelante)', price: 55000, fromPrice: false, durationMin: 180 }
   ];
+}
+
+
+function getServiceStyles_() {
+  const stored = PropertiesService.getScriptProperties().getProperty('OASIS_SERVICE_STYLES');
+  if (stored) {
+    try {
+      const value = JSON.parse(stored);
+      return { ...DEFAULT_SERVICE_STYLES, ...value };
+    } catch (error) {}
+  }
+  return { ...DEFAULT_SERVICE_STYLES };
+}
+
+function validateServiceStyles_(styles) {
+  const allowedFonts = ['system', 'serif', 'arial', 'trebuchet'];
+  if (!styles ||
+      !/^#[0-9A-Fa-f]{6}$/.test(String(styles.nameColor || '')) ||
+      !/^#[0-9A-Fa-f]{6}$/.test(String(styles.detailColor || '')) ||
+      !/^#[0-9A-Fa-f]{6}$/.test(String(styles.cardColor || '')) ||
+      !allowedFonts.includes(styles.nameFont) ||
+      !allowedFonts.includes(styles.detailFont) ||
+      !Number.isInteger(styles.nameSize) || styles.nameSize < 12 || styles.nameSize > 36 ||
+      !Number.isInteger(styles.detailSize) || styles.detailSize < 10 || styles.detailSize > 24) {
+    throw new Error('invalid_service_styles');
+  }
 }
 
 function validateServices_(services) {
