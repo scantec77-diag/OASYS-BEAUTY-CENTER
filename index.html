@@ -144,10 +144,11 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 <section id="availability-editor" class="availability-editor" hidden aria-labelledby="availability-editor-title">
 <h3 id="availability-editor-title">Editar días y horarios</h3>
 <p class="muted">Elegí los días de atención y el horario de apertura y cierre.</p>
-<form id="availability-settings-form">\n<div class="availability-days" role="group" aria-label="Días de atención">
+<form id="availability-settings-form">
+<div class="availability-days" role="group" aria-label="Días de atención">
 <label><input type="checkbox" name="days" value="1"> Lun</label><label><input type="checkbox" name="days" value="2"> Mar</label><label><input type="checkbox" name="days" value="3"> Mié</label><label><input type="checkbox" name="days" value="4"> Jue</label><label><input type="checkbox" name="days" value="5"> Vie</label><label><input type="checkbox" name="days" value="6"> Sáb</label><label><input type="checkbox" name="days" value="7"> Dom</label>
 </div>
-<form id="availability-settings-form">
+
 <label for="availability-open-time">Abre</label><input id="availability-open-time" name="openTime" type="time" min="00:00" max="23:30" step="1800" required>
 <label for="availability-close-time">Cierra</label><input id="availability-close-time" name="closeTime" type="time" min="00:30" max="23:59" step="1800" required>
 <button id="availability-settings-save" type="submit" disabled>Guardar horario</button>
