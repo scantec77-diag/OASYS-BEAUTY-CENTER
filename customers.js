@@ -16,7 +16,7 @@ auth.languageCode = 'es';
 // Target: Firestore Native/Standard, (default). Verify edition before deployment.
 const db = getFirestore(app);
 const profileRef = user => doc(db, 'clientesWeb', user.uid);
-const legacyRef = user => doc(db, 'clientesPorEmail', user.email.trim());
+const legacyRef = user => doc(db, 'clientesPorEmail', user.email.trim().toLowerCase());
 const publicProfile = data => ({
   nombre: typeof data.nombre === 'string' ? data.nombre : '',
   telefono: typeof data.telefono === 'string' ? data.telefono : '',
