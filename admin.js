@@ -50,9 +50,11 @@ if (!normalizedAdmins.length) {
       const code = error?.code || '';
       status.textContent = code === 'auth/unauthorized-domain'
         ? 'Firebase todavía necesita autorizar el dominio de Oasis para el inicio con Google.'
-        : code === 'auth/popup-blocked'
-          ? 'El navegador bloqueó la ventana de Google. Permití las ventanas emergentes y reintentá.'
-          : 'No se pudo iniciar sesión con Google. Revisá la conexión y volvé a intentar.';
+        : code === 'auth/operation-not-allowed'
+          ? 'Falta habilitar el proveedor Google en Firebase Authentication.'
+          : code === 'auth/popup-blocked'
+            ? 'El navegador bloqueó la ventana de Google. Permití las ventanas emergentes y reintentá.'
+            : 'No se pudo iniciar sesión con Google. Revisá la conexión y volvé a intentar.';
     } finally {
       loginButton.disabled = false;
     }
