@@ -94,7 +94,22 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 .admin-services-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .admin-services-actions button{margin-top:0}
 @media(max-width:760px){.admin-service-row{grid-template-columns:1fr 1fr}.admin-service-row label:first-child{grid-column:1/-1}.admin-service-row .admin-service-delete{grid-column:1/-1}}
-.admin-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}.admin-tools button{margin:0}</style></head>
+.admin-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}.admin-tools button{margin:0}
+.availability-legend{display:flex;flex-wrap:wrap;gap:8px 12px;margin:10px 0 12px;font-size:12px}
+.availability-legend span{display:inline-flex;align-items:center;gap:5px}
+.legend-swatch{display:inline-block;width:16px;height:16px;border:1px solid #bdb7ae;border-radius:4px}
+.legend-swatch.unavailable{background:var(--status-unavailable,#E5E7EB)}
+.legend-swatch.available{background:var(--status-available,#FFFFFF)}
+.legend-swatch.busy{background:var(--status-busy,#FECACA)}
+.legend-swatch.taken{background:var(--status-taken,#BFDBFE)}
+.availability-slot.unavailable{background:var(--status-unavailable,#E5E7EB);border-color:#c7cbd1;color:#555b63}
+.availability-slot.free{background:var(--status-available,#FFFFFF);border-color:#d8d8d8}
+.availability-slot.busy{background:var(--status-busy,#FECACA);border-color:#d9443d;color:#8d211d}
+.availability-slot.taken{background:var(--status-taken,#BFDBFE);border-color:#6694c2;color:#1d4568}
+.availability-color-palette{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.availability-color-palette label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:8px 10px;background:#fff;border:1px solid #eadfcf;border-radius:9px}
+.availability-color-palette input[type=color]{width:44px;height:36px;padding:2px}
+</style></head>
 <body><p id="preview-note" hidden class="preview-note">Vista previa: el saludo y el clima muestran datos ilustrativos.</p><header><div class="site-header-layout">
 <section class="header-card weather-card" aria-labelledby="weather-title">
 <div class="weather-title" id="weather-title">CLIMA DE TU ZONA</div>
@@ -149,7 +164,7 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 <div class="availability-day-panel">
 <h3 id="availability-selected-day"></h3>
 <p id="availability-status" class="muted" role="status" aria-live="polite"></p>
-<div id="availability-slots" class="availability-slots" aria-label="Horarios de atención"></div>
+<div id="availability-legend" class="availability-legend" aria-label="Estados de los horarios"><span><i class="legend-swatch unavailable"></i>No disponible</span><span><i class="legend-swatch available"></i>Disponible</span><span><i class="legend-swatch busy"></i>Ocupado</span><span><i class="legend-swatch taken"></i>Turno tomado</span></div><div id="availability-slots" class="availability-slots" aria-label="Horarios de atención"></div>
 </div>
 </div>
 <section id="availability-editor" class="availability-editor" hidden aria-labelledby="availability-editor-title">
@@ -162,6 +177,12 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 
 <label for="availability-open-time">Abre</label><input id="availability-open-time" name="openTime" type="time" min="00:00" max="23:30" step="1800" required>
 <label for="availability-close-time">Cierra</label><input id="availability-close-time" name="closeTime" type="time" min="00:30" max="23:59" step="1800" required>
+<div class="availability-color-palette" role="group" aria-label="Colores de estados">
+<label for="availability-color-unavailable">No disponible<input id="availability-color-unavailable" type="color" value="#E5E7EB"></label>
+<label for="availability-color-available">Disponible<input id="availability-color-available" type="color" value="#FFFFFF"></label>
+<label for="availability-color-busy">Ocupado<input id="availability-color-busy" type="color" value="#FECACA"></label>
+<label for="availability-color-taken">Turno tomado<input id="availability-color-taken" type="color" value="#BFDBFE"></label>
+</div>
 <button id="availability-settings-save" type="submit" disabled>Guardar horario</button>
 <p id="availability-settings-status" class="muted" role="status" aria-live="polite"></p>
 </form>
