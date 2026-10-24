@@ -310,6 +310,12 @@ settingsForm.addEventListener('submit', event => {
     settingsStatus.textContent = 'La hora de cierre tiene que ser posterior a la apertura.';
     return;
   }
+  if (secondShiftToggle.checked &&
+      (!secondOpenTime || !secondCloseTime || minutes(secondOpenTime) < minutes(closeTime) ||
+       minutes(secondCloseTime) <= minutes(secondOpenTime))) {
+    settingsStatus.textContent = 'El segundo tramo debe comenzar al terminar el descanso y cerrar después de su apertura.';
+    return;
+  }
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = AVAILABILITY_ENDPOINT;
