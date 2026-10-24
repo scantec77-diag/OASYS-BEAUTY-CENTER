@@ -4,6 +4,8 @@
 //   Customers can only create and read their own verified profile; no list/update/delete.
 // clientesPorEmail/{email-lowercase}: email, nombre (1..80), telefono (7..25), createdAt.
 //   Oasis can create a manual record; the verified matching customer can read only their own record.
+// configuracionPublica/senas: amount, walletName, accountHolder, alias, cbuCvu, paymentLink, updatedAt, updatedBy; publicly readable payment instructions, Oasis-admin writes only.
+// senasRecibidas/{reservation UUID}: referencia, cliente, monto, dayKey, createdAt, createdBy; verified Oasis admin only.
 // pagosManuales/{paymentId}: monto (0..100,000,000), dayKey (YYYY-MM-DD), createdAt, createdBy.
 //   Only verified Oasis admins can read or create these payment records.
 rules_version = '2';
@@ -79,47 +81,44 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
+    function isValidDepositConfig(data) {
+      return data.keys().hasAll(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
+        && data.keys().hasOnly(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
+        && data.amount is number && data.amount > 0 && data.amount <= 100000000
+        && data.walletName is string && data.walletName.size() <= 60
+        && data.accountHolder is string && data.accountHolder.size() <= 100
+        && data.alias is string && data.alias.size() <= 80
+        && data.cbuCvu is string && data.cbuCvu.size() <= 40
+        && data.paymentLink is string && data.paymentLink.size() <= 500
+        && data.updatedAt == request.time
+        && data.updatedBy == request.auth.token.email.lower();
+    }
+
+    function isValidReceivedDeposit(data, depositId) {
+      return depositId.matches('^[a-fA-F0-9-]{36}$')
+        && data.referencia == depositId
+        && data.keys().hasAll(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
+        && data.keys().hasOnly(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
+        && data.referencia is string && data.referencia.size() == 36
+        && data.cliente is string && data.cliente.size() > 0 && data.cliente.size() <= 80
+        && data.monto is number && data.monto > 0 && data.monto <= 100000000
+        && data.dayKey is string && data.dayKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.createdAt == request.time
+        && data.createdBy == request.auth.token.email.lower();
+    }
+
     match /configuracionPublica/{configId} {
-      // The booking page needs the current deposit amount and payment destination.
+      // Public booking requests only the deposit terms the center asked to display.
       allow get: if configId == 'senas';
       allow list: if false;
-      allow create, update: if isOasisAdmin()
-        && configId == 'senas'
-        && request.resource.data.keys().hasAll(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
-        && request.resource.data.keys().hasOnly(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
-        && request.resource.data.amount is number
-        && request.resource.data.amount > 0
-        && request.resource.data.amount <= 100000000
-        && request.resource.data.walletName is string && request.resource.data.walletName.size() <= 60
-        && request.resource.data.accountHolder is string && request.resource.data.accountHolder.size() <= 100
-        && request.resource.data.alias is string && request.resource.data.alias.size() <= 80
-        && request.resource.data.cbuCvu is string && request.resource.data.cbuCvu.size() <= 40
-        && request.resource.data.paymentLink is string && request.resource.data.paymentLink.size() <= 500
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.updatedBy == request.auth.token.email.lower();
+      allow create: if isOasisAdmin() && configId == 'senas' && isValidDepositConfig(request.resource.data);
+      allow update: if isOasisAdmin() && configId == 'senas' && isValidDepositConfig(request.resource.data);
       allow delete: if false;
     }
 
     match /senasRecibidas/{depositId} {
       allow get, list: if isOasisAdmin();
-      allow create: if isOasisAdmin()
-        && depositId.matches('^[a-fA-F0-9-]{36}$')
-        && request.resource.data.referencia == depositId
-        && request.resource.data.keys().hasAll(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
-        && request.resource.data.keys().hasOnly(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
-        && request.resource.data.referencia is string
-        && request.resource.data.referencia.size() > 0
-        && request.resource.data.referencia.size() <= 80
-        && request.resource.data.cliente is string
-        && request.resource.data.cliente.size() > 0
-        && request.resource.data.cliente.size() <= 80
-        && request.resource.data.monto is number
-        && request.resource.data.monto > 0
-        && request.resource.data.monto <= 100000000
-        && request.resource.data.dayKey is string
-        && request.resource.data.dayKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.createdBy == request.auth.token.email.lower();
+      allow create: if isOasisAdmin() && isValidReceivedDeposit(request.resource.data, depositId);
       allow update, delete: if false;
     }
 
