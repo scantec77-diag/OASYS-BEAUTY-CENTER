@@ -190,7 +190,8 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 </section>
 <section id="administracion" class="card" aria-labelledby="admin-title">
 <h2 id="admin-title">Administración de Oasis</h2>
-<p class="muted">Ingreso exclusivo para la cuenta administradora.</p><div class="admin-tools"><button id="admin-services-button" type="button" class="secondary" hidden>Servicios</button><button id="availability-edit-button" type="button" class="availability-edit-button" title="Editar días y horarios de turnos" aria-label="Editar días y horarios de turnos" hidden>🗓️ Editar turnos</button></div>
+<p class="muted">Ingreso exclusivo para la cuenta administradora.</p>
+<section id="estadisticas" class="card" aria-labelledby="stats-title" hidden><div class="stats-head"><h2 id="stats-title">Estadísticas del centro</h2><span class="pill">Vista preliminar · sin datos</span></div><p class="muted">Panel preparado para administración. Los indicadores se actualizarán cuando se conecte el sistema de reservas y pagos.</p><div class="stats-grid"><div class="stat"><span>Turnos de hoy</span><strong>—</strong></div><div class="stat"><span>Turnos del mes</span><strong>—</strong></div><div class="stat"><span>Ingresos confirmados</span><strong>—</strong></div><div class="stat"><span>Señas pendientes</span><strong>—</strong></div></div><p class="muted"><small>Los indicadores todavía no están conectados al sistema de reservas y pagos.</small></p></section><div class="admin-tools"><button id="admin-services-button" type="button" class="secondary" hidden>Servicios</button><button id="availability-edit-button" type="button" class="availability-edit-button" title="Editar días y horarios de turnos" aria-label="Editar días y horarios de turnos" hidden>🗓️ Editar turnos</button></div>
 <section id="availability-editor" class="availability-editor" hidden aria-labelledby="availability-editor-title">
 <h3 id="availability-editor-title">Editar días y horarios</h3>
 <p class="muted">Elegí los días de atención y el horario de apertura y cierre.</p>
@@ -235,10 +236,10 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 <p id="admin-auth-status" role="status" aria-live="polite">Falta configurar el Gmail administrador para habilitar el acceso.</p>
 <button id="admin-google-login" type="button" disabled>Iniciar sesión con Google</button>
 <div id="admin-session" hidden><p>Sesión: <strong id="admin-email"></strong></p><button id="admin-google-logout" type="button" class="secondary">Cerrar sesión</button></div>
-<section id="estadisticas" class="card" aria-labelledby="stats-title" hidden><div class="stats-head"><h2 id="stats-title">Estadísticas del centro</h2><span class="pill">Vista preliminar · sin datos</span></div><p class="muted">Panel preparado para administración. Los indicadores se actualizarán cuando se conecte el sistema de reservas y pagos.</p><div class="stats-grid"><div class="stat"><span>Turnos de hoy</span><strong>—</strong></div><div class="stat"><span>Turnos del mes</span><strong>—</strong></div><div class="stat"><span>Ingresos confirmados</span><strong>—</strong></div><div class="stat"><span>Señas pendientes</span><strong>—</strong></div></div><p class="muted"><small>Los indicadores todavía no están conectados al sistema de reservas y pagos.</small></p></section></section>
+</section>
 
 <section class="card"><h2>Contacto</h2><p>Próximamente: WhatsApp Business, dirección y redes sociales oficiales.</p></section></main><footer><small>© <span id="year"></span> Oasis Beauty Center · Sitio en preparación · <a href="#administracion">Acceso administrador</a></small></footer>
 <script type="module" src="./booking.js"></script><script type="module" src="./availability.js"></script>
 <script type="module" src="customer-bootstrap.js"></script>
 <script type="module" src="./header-widgets.js"></script>
-<script type="module" src="./services.js?v=20261024-3"></script><script type="module" src="./admin.js?v=20261024-3"></script></body></html>
+<script type="module" src="./services.js?v=20261024-4"></script><script type="module" src="./admin.js?v=20261024-4"></script></body></html>
