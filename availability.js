@@ -112,6 +112,10 @@ function renderDay(busyIntervals = null) {
     status.textContent = validEndpoint ? 'Cargando los días y horarios de Oasis…' : 'La conexión para consultar y guardar horarios todavía está pendiente.';
     return;
   }
+  if (!schedule.days.length) {
+    status.textContent = 'Los días de atención todavía no están configurados.';
+    return;
+  }
   if (!schedule.days.includes(weekday(selectedDate))) {
     status.textContent = 'Oasis no atiende este día.';
     return;
@@ -222,7 +226,12 @@ settingsForm.addEventListener('submit', event => {
   }
   if (!settingsForm.reportValidity()) return;
   const data = new FormData(settingsForm);
-  const days = data.getAll('days').join(',');
+  const dayValues = data.getAll('days');
+  if (!dayValues.length) {
+    settingsStatus.textContent = 'Seleccioná al menos un día de atención.';
+    return;
+  }
+  const days = dayValues.join(',');
   const openTime = String(data.get('openTime'));
   const closeTime = String(data.get('closeTime'));
   if (minutes(closeTime) <= minutes(openTime)) {
