@@ -9,8 +9,12 @@ export function mountCustomers(api) {
   const welcomeCard = el('welcome-card');
   function setWelcome(data) {
     const firstName = String(data?.nombre || '').trim().split(/\s+/)[0];
+    const greetingElement = el('welcome-greeting');
+    const noteElement = el('welcome-note');
     if (!firstName) {
-      welcomeCard.hidden = true;
+      greetingElement.textContent = 'Te damos la bienvenida';
+      noteElement.textContent = 'Ingresá con tu mail para ver tu saludo personal';
+      welcomeCard.hidden = false;
       return;
     }
     const hour = Number(new Intl.DateTimeFormat('es-AR', {
@@ -18,7 +22,8 @@ export function mountCustomers(api) {
     }).format(new Date()));
     const greeting = hour >= 5 && hour < 12 ? 'Buen día'
       : hour >= 12 && hour < 20 ? 'Buenas tardes' : 'Buenas noches';
-    el('welcome-greeting').textContent = `${greeting}, ${firstName}`;
+    greetingElement.textContent = `${greeting}, ${firstName}`;
+    noteElement.textContent = 'Qué lindo tenerte de vuelta';
     welcomeCard.hidden = false;
   }
   const storage = {
