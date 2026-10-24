@@ -12,9 +12,13 @@ const editor = document.getElementById('availability-editor');
 const settingsForm = document.getElementById('availability-settings-form');
 const settingsStatus = document.getElementById('availability-settings-status');
 const saveButton = document.getElementById('availability-settings-save');
+const secondShiftToggle = document.getElementById('availability-second-shift-enabled');
+const secondShiftFields = document.getElementById('availability-second-shift-fields');
+const secondOpenInput = document.getElementById('availability-open-time-2');
+const secondCloseInput = document.getElementById('availability-close-time-2');
 const frame = document.getElementById('oasis-schedule-save-frame');
 const defaultColors = { unavailable: '#E5E7EB', available: '#FFFFFF', busy: '#FECACA', taken: '#BFDBFE' };
-const defaultSchedule = { days: [], openTime: '09:00', closeTime: '21:00', statusColors: { ...defaultColors } };
+const defaultSchedule = { days: [], openTime: '09:00', closeTime: '21:00', secondOpenTime: '', secondCloseTime: '', statusColors: { ...defaultColors } };
 const todayParts = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Argentina/Buenos_Aires',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -112,6 +116,14 @@ function timeLabel(value) {
   return String(Math.floor(value / 60)).padStart(2, '0') + ':' + String(value % 60).padStart(2, '0');
 }
 
+function scheduleRanges() {
+  const ranges = [{ start: schedule.openTime, end: schedule.closeTime }];
+  if (schedule.secondOpenTime && schedule.secondCloseTime) {
+    ranges.push({ start: schedule.secondOpenTime, end: schedule.secondCloseTime });
+  }
+  return ranges;
+}
+
 function renderDay(busyIntervals = null) {
   const dateText = spanishDate.format(selectedDate);
   dayLabel.textContent = dateText.charAt(0).toLocaleUpperCase('es-AR') + dateText.slice(1);
@@ -125,20 +137,28 @@ function renderDay(busyIntervals = null) {
     status.textContent = 'Los días de atención todavía no están configurados.';
     return;
   }
-  const open = minutes(schedule.openTime);
-  const close = minutes(schedule.closeTime);
-  if (!schedule.days.includes(weekday(selectedDate))) {
-    for (let start = open; start < close; start += 60) {
-      addSlot(start, Math.min(start + 60, close), 'unavailable', 'No disponible');
+
+  const ranges = scheduleRanges();
+  const isOpenDay = schedule.days.includes(weekday(selectedDate));
+  if (!isOpenDay) {
+    for (let i = 0; i < ranges.length; i++) {
+      const range = ranges[i];
+      for (let start = minutes(range.start); start < minutes(range.end); start += 60) {
+        addSlot(start, Math.min(start + 60, minutes(range.end)), 'unavailable', 'No disponible');
+      }
+      if (i < ranges.length - 1) addBreakRow(range.end, ranges[i + 1].start);
     }
     status.textContent = 'Oasis no atiende este día.';
     return;
   }
 
-
   if (busyIntervals === null) {
-    for (let start = open; start < close; start += 60) {
-      addSlot(start, Math.min(start + 60, close), 'pending', 'Consultando…');
+    for (let i = 0; i < ranges.length; i++) {
+      const range = ranges[i];
+      for (let start = minutes(range.start); start < minutes(range.end); start += 60) {
+        addSlot(start, Math.min(start + 60, minutes(range.end)), 'pending', 'Consultando…');
+      }
+      if (i < ranges.length - 1) addBreakRow(range.end, ranges[i + 1].start);
     }
     status.textContent = 'Consultando reservas…';
     return;
@@ -146,25 +166,36 @@ function renderDay(busyIntervals = null) {
 
   const selectedIso = isoDate(selectedDate);
   const dayStart = new Date(selectedIso + 'T00:00:00-03:00').getTime();
-  for (let start = open; start < close; start += 60) {
-    const end = Math.min(start + 60, close);
-    const startMs = dayStart + start * 60 * 1000;
-    const endMs = dayStart + end * 60 * 1000;
-    const matching = busyIntervals.filter(event => event.start < endMs && event.end > startMs);
-    const state = matching.some(event => event.status === 'taken') ? 'taken'
-      : matching.some(event => event.status === 'unavailable') ? 'unavailable'
-        : matching.length ? 'busy' : 'free';
-    const labels = { unavailable: 'No disponible', free: 'Disponible', busy: 'Ocupado', taken: 'Turno tomado' };
-    addSlot(start, end, state, labels[state]);
+  for (let i = 0; i < ranges.length; i++) {
+    const range = ranges[i];
+    const rangeStart = minutes(range.start);
+    const rangeEnd = minutes(range.end);
+    for (let start = rangeStart; start < rangeEnd; start += 60) {
+      const end = Math.min(start + 60, rangeEnd);
+      const startMs = dayStart + start * 60 * 1000;
+      const endMs = dayStart + end * 60 * 1000;
+      const matching = busyIntervals.filter(event => event.start < endMs && event.end > startMs);
+      const state = matching.some(event => event.status === 'taken') ? 'taken'
+        : matching.some(event => event.status === 'unavailable') ? 'unavailable'
+          : matching.length ? 'busy' : 'free';
+      const labels = { unavailable: 'No disponible', free: 'Disponible', busy: 'Ocupado', taken: 'Turno tomado' };
+      addSlot(start, end, state, labels[state]);
+    }
+    if (i < ranges.length - 1) addBreakRow(range.end, ranges[i + 1].start);
   }
-  status.textContent = 'Horario de atención: ' + schedule.openTime + ' a ' + schedule.closeTime + '.';
+  status.textContent = 'Horario de atención: ' + ranges.map(range => range.start + '–' + range.end).join(' y ') + '.';
 }
 
-function addSlot(start, end, state, label) {
+function addBreakRow(startTime, endTime) {
+  const start = minutes(startTime);
+  const end = minutes(endTime);
+  if (end > start) addSlot(start, end, 'unavailable', 'Descanso · No disponible', true);
+}
+function addSlot(start, end, state, label, showRange = false) {
   const row = document.createElement('div');
   row.className = 'availability-slot ' + state;
   const time = document.createElement('time');
-  time.textContent = timeLabel(start) + (end - start < 60 ? '–' + timeLabel(end) : '');
+  time.textContent = showRange || end - start < 60 ? timeLabel(start) + '–' + timeLabel(end) : timeLabel(start);
   const description = document.createElement('span');
   description.textContent = label;
   row.append(time, description);
@@ -200,6 +231,12 @@ function renderEditor() {
   });
   document.getElementById('availability-open-time').value = schedule.openTime;
   document.getElementById('availability-close-time').value = schedule.closeTime;
+  secondShiftToggle.checked = Boolean(schedule.secondOpenTime && schedule.secondCloseTime);
+  secondShiftFields.hidden = !secondShiftToggle.checked;
+  secondOpenInput.value = schedule.secondOpenTime || '';
+  secondCloseInput.value = schedule.secondCloseTime || '';
+  secondOpenInput.required = secondShiftToggle.checked;
+  secondCloseInput.required = secondShiftToggle.checked;
   const colors = schedule.statusColors || defaultColors;
   for (const key of Object.keys(defaultColors)) {
     document.getElementById('availability-color-' + key).value = colors[key] || defaultColors[key];
@@ -225,6 +262,8 @@ async function loadSettings() {
       days: Array.isArray(result.schedule.days) ? result.schedule.days.map(Number) : [],
       openTime: result.schedule.openTime || '09:00',
       closeTime: result.schedule.closeTime || '21:00',
+      secondOpenTime: result.schedule.secondOpenTime || '',
+      secondCloseTime: result.schedule.secondCloseTime || '',
       statusColors: { ...defaultColors, ...(result.schedule.statusColors || {}) }
     };
     scheduleLoaded = true;
@@ -237,6 +276,12 @@ async function loadSettings() {
     renderEditor();
   }
 }
+
+secondShiftToggle.addEventListener('change', () => {
+  secondShiftFields.hidden = !secondShiftToggle.checked;
+  secondOpenInput.required = secondShiftToggle.checked;
+  secondCloseInput.required = secondShiftToggle.checked;
+});
 
 editButton.addEventListener('click', () => {
   editor.hidden = !editor.hidden;
@@ -259,6 +304,8 @@ settingsForm.addEventListener('submit', event => {
   const days = dayValues.join(',');
   const openTime = String(data.get('openTime'));
   const closeTime = String(data.get('closeTime'));
+  const secondOpenTime = secondShiftToggle.checked ? secondOpenInput.value : '';
+  const secondCloseTime = secondShiftToggle.checked ? secondCloseInput.value : '';
   if (minutes(closeTime) <= minutes(openTime)) {
     settingsStatus.textContent = 'La hora de cierre tiene que ser posterior a la apertura.';
     return;
@@ -271,7 +318,7 @@ settingsForm.addEventListener('submit', event => {
   const statusColors = Object.fromEntries(Object.keys(defaultColors).map(key => [
     key, document.getElementById('availability-color-' + key).value
   ]));
-  const fields = { action: 'saveSchedule', idToken: adminSession.idToken, days, openTime, closeTime, statusColors: JSON.stringify(statusColors) };
+  const fields = { action: 'saveSchedule', idToken: adminSession.idToken, days, openTime, closeTime, secondOpenTime, secondCloseTime, statusColors: JSON.stringify(statusColors) };
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement('input');
     input.type = 'hidden';
