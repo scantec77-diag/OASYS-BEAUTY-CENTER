@@ -11,8 +11,24 @@ const closeButton = document.getElementById('admin-services-close');
 const status = document.getElementById('admin-services-status');
 const frame = document.getElementById('oasis-services-save-frame');
 const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(AVAILABILITY_ENDPOINT);
-let adminSession = null;
+const defaultStyles = {
+  nameColor: '#42392E',
+  detailColor: '#766B5D',
+  cardColor: '#FFFDF9',
+  nameFont: 'serif',
+  detailFont: 'system',
+  nameSize: 16,
+  detailSize: 14
+};
+const fonts = {
+  system: 'system-ui, sans-serif',
+  serif: 'Georgia, serif',
+  arial: 'Arial, sans-serif',
+  trebuchet: '"Trebuchet MS", Arial, sans-serif'
+};
+let adminSession = window.oasisAdminSession || null;
 let services = readStaticServices();
+let styles = { ...defaultStyles };
 
 function readStaticServices() {
   return [...catalog.querySelectorAll('.service-item')].map((item, index) => {
@@ -28,6 +44,18 @@ function readStaticServices() {
       durationMin: duration ? Number(duration[1]) : null
     };
   });
+}
+
+function applyStyles(value = defaultStyles) {
+  styles = { ...defaultStyles, ...(value || {}) };
+  const root = document.documentElement;
+  root.style.setProperty('--service-name-color', styles.nameColor);
+  root.style.setProperty('--service-detail-color', styles.detailColor);
+  root.style.setProperty('--service-card-color', styles.cardColor);
+  root.style.setProperty('--service-name-font', fonts[styles.nameFont] || fonts.serif);
+  root.style.setProperty('--service-detail-font', fonts[styles.detailFont] || fonts.system);
+  root.style.setProperty('--service-name-size', Math.min(36, Math.max(12, Number(styles.nameSize) || 16)) + 'px');
+  root.style.setProperty('--service-detail-size', Math.min(24, Math.max(10, Number(styles.detailSize) || 14)) + 'px');
 }
 
 function formatMoney(amount, fromPrice) {
@@ -126,11 +154,18 @@ function createRow(service, index) {
   remove.setAttribute('aria-label', 'Eliminar ' + (service.name || 'servicio'));
   remove.addEventListener('click', () => {
     row.remove();
-    status.textContent = 'Servicio quitado de la lista. Tocá Guardar para confirmar.';
+    status.textContent = 'Servicio quitado de la lista. Tocá Guardar cambios para confirmar.';
   });
 
   row.append(nameLabel, priceLabel, fromLabel, durationLabel, remove);
   return row;
+}
+
+function renderStyleControls() {
+  for (const key of ['nameColor', 'detailColor', 'cardColor', 'nameFont', 'detailFont', 'nameSize', 'detailSize']) {
+    const input = document.getElementById('service-style-' + key);
+    if (input) input.value = styles[key] ?? defaultStyles[key];
+  }
 }
 
 function collectRows() {
@@ -146,6 +181,19 @@ function collectRows() {
       durationMin: durationText === '' ? null : Number(durationText)
     };
   });
+}
+
+function collectStyles() {
+  const value = key => document.getElementById('service-style-' + key).value;
+  return {
+    nameColor: value('nameColor'),
+    detailColor: value('detailColor'),
+    cardColor: value('cardColor'),
+    nameFont: value('nameFont'),
+    detailFont: value('detailFont'),
+    nameSize: Number(value('nameSize')),
+    detailSize: Number(value('detailSize'))
+  };
 }
 
 function loadJSONP(params) {
@@ -173,19 +221,30 @@ async function refreshServices() {
   try {
     const result = await loadJSONP({ action: 'services' });
     if (!result.ok || !Array.isArray(result.services)) throw new Error('Catálogo no disponible.');
+    applyStyles(result.styles || defaultStyles);
     renderCatalog(result.services);
-    if (editor && !editor.hidden) renderRows();
+    if (!editor.hidden) {
+      renderRows();
+      renderStyleControls();
+    }
   } catch {
     status.textContent = 'No se pudo leer la lista guardada. Se muestra la lista inicial.';
   }
+}
+
+function syncAdmin(detail) {
+  adminSession = detail || null;
+  adminButton.hidden = !adminSession;
+  saveButton.disabled = !validEndpoint || !adminSession?.idToken;
 }
 
 adminButton.addEventListener('click', () => {
   editor.hidden = !editor.hidden;
   if (!editor.hidden) {
     renderRows();
+    renderStyleControls();
     status.textContent = validEndpoint
-      ? 'Editá la lista y guardá los cambios.'
+      ? 'Editá servicios y estilos; después guardá los cambios.'
       : 'El editor está listo. Falta publicar y vincular el servicio de guardado.';
   }
 });
@@ -215,6 +274,7 @@ saveButton.addEventListener('click', () => {
     status.textContent = 'Revisá los precios y las duraciones. Los tiempos se cargan cada 30 minutos.';
     return;
   }
+  const nextStyles = collectStyles();
   const form = document.createElement('form');
   form.method = 'POST';
   form.action = AVAILABILITY_ENDPOINT;
@@ -223,7 +283,8 @@ saveButton.addEventListener('click', () => {
   const fields = {
     action: 'saveServices',
     idToken: adminSession.idToken,
-    services: JSON.stringify(nextServices)
+    services: JSON.stringify(nextServices),
+    styles: JSON.stringify(nextStyles)
   };
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement('input');
@@ -236,7 +297,7 @@ saveButton.addEventListener('click', () => {
     frame.onload = null;
     window.setTimeout(refreshServices, 900);
   };
-  status.textContent = 'Guardando lista de servicios…';
+  status.textContent = 'Guardando catálogo y estilos…';
   document.body.append(form);
   form.submit();
   form.remove();
@@ -248,10 +309,6 @@ window.addEventListener('message', event => {
   if (event.data.ok) window.setTimeout(refreshServices, 400);
 });
 
-document.addEventListener('oasis:admin-auth', event => {
-  adminSession = event.detail || null;
-  adminButton.hidden = !adminSession;
-  saveButton.disabled = !validEndpoint || !adminSession?.idToken;
-});
-
+document.addEventListener('oasis:admin-auth', event => syncAdmin(event.detail));
+if (adminSession) syncAdmin(adminSession);
 if (validEndpoint) refreshServices();
