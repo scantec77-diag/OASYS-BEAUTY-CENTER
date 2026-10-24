@@ -75,7 +75,7 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 .availability-slot.pending{background:#f6f3ee;color:#766b5d}
 .availability-editor{margin-top:18px;padding:18px;border:1px solid #d8c6a7;border-radius:14px;background:#fffaf3}
 .availability-editor h3{margin:0}
-.availability-days{display:flex;gap:8px;flex-wrap:wrap}
+.availability-days{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1}
 .availability-days label{margin:4px 0;padding:7px 10px;background:#fff;border:1px solid #eadfcf;border-radius:9px}
 .availability-days input{width:auto;margin:0 5px 0 0;padding:0}
 #availability-settings-form{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-items:end}
@@ -144,7 +144,7 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 <section id="availability-editor" class="availability-editor" hidden aria-labelledby="availability-editor-title">
 <h3 id="availability-editor-title">Editar días y horarios</h3>
 <p class="muted">Elegí los días de atención y el horario de apertura y cierre.</p>
-<div class="availability-days" role="group" aria-label="Días de atención">
+<form id="availability-settings-form">\n<div class="availability-days" role="group" aria-label="Días de atención">
 <label><input type="checkbox" name="days" value="1"> Lun</label><label><input type="checkbox" name="days" value="2"> Mar</label><label><input type="checkbox" name="days" value="3"> Mié</label><label><input type="checkbox" name="days" value="4"> Jue</label><label><input type="checkbox" name="days" value="5"> Vie</label><label><input type="checkbox" name="days" value="6"> Sáb</label><label><input type="checkbox" name="days" value="7"> Dom</label>
 </div>
 <form id="availability-settings-form">
