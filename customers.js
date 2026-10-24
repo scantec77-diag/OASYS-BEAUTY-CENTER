@@ -16,7 +16,12 @@ auth.languageCode = 'es';
 // Target: Firestore Native/Standard, (default). Verify edition before deployment.
 const db = getFirestore(app);
 const profileRef = user => doc(db, 'clientesWeb', user.uid);
-const publicProfile = data => ({nombre: data.nombre, telefono: data.telefono, email: data.email});
+const legacyRef = user => doc(db, 'clientesPorEmail', user.email.trim().toLowerCase());
+const publicProfile = data => ({
+  nombre: typeof data.nombre === 'string' ? data.nombre : '',
+  telefono: typeof data.telefono === 'string' ? data.telefono : '',
+  email: data.email
+});
 mountCustomers({
   isEmailLink: url => isSignInWithEmailLink(auth, url),
   sendLink: (email, url) => sendSignInLinkToEmail(auth, email, {url, handleCodeInApp: true}),
@@ -26,6 +31,17 @@ mountCustomers({
   async getProfile(user) {
     const snapshot = await getDocFromServer(profileRef(user));
     return snapshot.exists() ? publicProfile(snapshot.data()) : null;
+  },
+  async getLegacyProfile(user) {
+    if (!user.emailVerified || !user.email) return null;
+    const snapshot = await getDocFromServer(legacyRef(user));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data();
+    if (typeof data.email !== 'string' ||
+        data.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
+      throw new Error('legacy-email-mismatch');
+    }
+    return {...publicProfile(data), origen: 'antecedente'};
   },
   async createProfile(user, fields) {
     // Transaction prevents duplicate profiles and overwrites from two tabs.
