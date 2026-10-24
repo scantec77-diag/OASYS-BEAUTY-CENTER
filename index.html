@@ -115,6 +115,18 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 .availability-second-toggle{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:12px 0}
 .availability-second-toggle input{width:auto;margin:0}
 @media(max-width:520px){.availability-hours-grid{grid-template-columns:1fr}}
+
+.admin-services-style{margin:14px 0;padding:14px;border:1px solid #d8c6a7;border-radius:12px}
+.admin-services-style legend{padding:0 6px;font-weight:700}
+.admin-services-style p{margin:4px 0 10px}
+.admin-services-style-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.admin-services-style-grid label{margin:0;font-size:13px}
+.admin-services-style-grid input[type=color]{width:52px;height:38px;padding:2px;margin-top:6px}
+.admin-services-style-grid input[type=number],.admin-services-style-grid select{margin-top:6px}
+.service-item{background:var(--service-card-color,#fffdf9)}
+.service-item strong{color:var(--service-name-color,var(--ink));font-family:var(--service-name-font,Georgia,serif);font-size:var(--service-name-size,16px)}
+.service-item span{color:var(--service-detail-color,#766b5d);font-family:var(--service-detail-font,system-ui,sans-serif);font-size:var(--service-detail-size,14px)}
+@media(max-width:700px){.admin-services-style-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style></head>
 <body><p id="preview-note" hidden class="preview-note">Vista previa: el saludo y el clima muestran datos ilustrativos.</p><header><div class="site-header-layout">
 <section class="header-card weather-card" aria-labelledby="weather-title">
@@ -207,7 +219,18 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 </form>
 </section>
 <iframe id="oasis-schedule-save-frame" name="oasis-schedule-save-frame" title="Guardado de configuración" hidden>
-<section id="admin-services-editor" class="availability-editor" hidden aria-labelledby="admin-services-title"><h3 id="admin-services-title">Editar servicios</h3><p class="muted">Modificá el nombre, precio y duración; también podés agregar o quitar servicios.</p><div id="admin-services-rows" class="admin-services-rows"></div><div class="admin-services-actions"><button id="admin-service-add" type="button" class="secondary">Agregar servicio</button><button id="admin-services-save" type="button" disabled>Guardar cambios</button><button id="admin-services-close" type="button" class="secondary">Cerrar</button></div><p id="admin-services-status" class="muted" role="status" aria-live="polite"></p></section>
+<section id="admin-services-editor" class="availability-editor" hidden aria-labelledby="admin-services-title"><h3 id="admin-services-title">Editar servicios</h3><p class="muted">Modificá el nombre, precio y duración; también podés agregar o quitar servicios.</p>
+<fieldset class="admin-services-style"><legend>Estilo del catálogo</legend><p class="muted"><small>Estos estilos se aplican a todos los servicios de la página.</small></p>
+<div class="admin-services-style-grid">
+<label for="service-style-nameColor">Color del nombre<input id="service-style-nameColor" type="color" value="#42392E"></label>
+<label for="service-style-detailColor">Color del precio y duración<input id="service-style-detailColor" type="color" value="#766B5D"></label>
+<label for="service-style-cardColor">Fondo de las tarjetas<input id="service-style-cardColor" type="color" value="#FFFDF9"></label>
+<label for="service-style-nameFont">Tipografía del nombre<select id="service-style-nameFont"><option value="serif">Serifada</option><option value="system">Sistema</option><option value="arial">Arial</option><option value="trebuchet">Trebuchet</option></select></label>
+<label for="service-style-detailFont">Tipografía de precio y duración<select id="service-style-detailFont"><option value="system">Sistema</option><option value="serif">Serifada</option><option value="arial">Arial</option><option value="trebuchet">Trebuchet</option></select></label>
+<label for="service-style-nameSize">Tamaño del nombre (px)<input id="service-style-nameSize" type="number" min="12" max="36" step="1" value="16"></label>
+<label for="service-style-detailSize">Tamaño de precio y duración (px)<input id="service-style-detailSize" type="number" min="10" max="24" step="1" value="14"></label>
+</div></fieldset>
+<div id="admin-services-rows" class="admin-services-rows"></div><div class="admin-services-actions"><button id="admin-service-add" type="button" class="secondary">Agregar servicio</button><button id="admin-services-save" type="button" disabled>Guardar cambios</button><button id="admin-services-close" type="button" class="secondary">Cerrar</button></div><p id="admin-services-status" class="muted" role="status" aria-live="polite"></p></section>
 <iframe id="oasis-services-save-frame" name="oasis-services-save-frame" title="Guardado del catálogo" hidden></iframe>
 <p id="admin-auth-status" role="status" aria-live="polite">Falta configurar el Gmail administrador para habilitar el acceso.</p>
 <button id="admin-google-login" type="button" disabled>Iniciar sesión con Google</button>
