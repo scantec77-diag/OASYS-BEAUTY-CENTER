@@ -30,7 +30,8 @@ function doGet(e) {
     if (!schedule.days.includes(weekday)) return jsonp(callback, { ok: true, date, closed: true, busy: [] });
 
     const dayStart = Utilities.parseDate(date + ' ' + schedule.openTime, TIME_ZONE, 'yyyy-MM-dd HH:mm');
-    const dayEnd = Utilities.parseDate(date + ' ' + schedule.closeTime, TIME_ZONE, 'yyyy-MM-dd HH:mm');
+    const lastClose = schedule.secondCloseTime || schedule.closeTime;
+    const dayEnd = Utilities.parseDate(date + ' ' + lastClose, TIME_ZONE, 'yyyy-MM-dd HH:mm');
     const calendar = CalendarApp.getCalendarById(CALENDAR_ID);
     if (!calendar) return jsonp(callback, { ok: false, error: 'calendar_unavailable' });
     const busy = calendar.getEvents(dayStart, dayEnd).map(event => ({
@@ -66,16 +67,27 @@ function doPost(e) {
   const days = String(params.days || '').split(',').filter(Boolean).map(Number);
   const openTime = String(params.openTime || '');
   const closeTime = String(params.closeTime || '');
+  const secondOpenTime = String(params.secondOpenTime || '');
+  const secondCloseTime = String(params.secondCloseTime || '');
   let statusColors;
   try { statusColors = JSON.parse(String(params.statusColors || '{}')); } catch (error) { statusColors = null; }
   if (days.some(day => !Number.isInteger(day) || day < 1 || day > 7) ||
       !/^([01]\d|2[0-3]):(00|30)$/.test(openTime) ||
       !/^([01]\d|2[0-3]):(00|30)$/.test(closeTime) ||
       timeMinutes_(closeTime) <= timeMinutes_(openTime) ||
+      Boolean(secondOpenTime) !== Boolean(secondCloseTime) ||
+      (secondOpenTime && (!/^([01]\d|2[0-3]):(00|30)$/.test(secondOpenTime) ||
+        !/^([01]\d|2[0-3]):(00|30)$/.test(secondCloseTime) ||
+        timeMinutes_(secondOpenTime) < timeMinutes_(closeTime) ||
+        timeMinutes_(secondCloseTime) <= timeMinutes_(secondOpenTime))) ||
       !validStatusColors_(statusColors)) {
     return postResult_(false, 'Revisá los días y el horario elegido.', 'oasis-schedule-save');
   }
-  const schedule = { days: Array.from(new Set(days)).sort((a,b) => a-b), openTime, closeTime, statusColors, updatedAt: new Date().toISOString() };
+  const schedule = {
+    days: Array.from(new Set(days)).sort((a,b) => a-b),
+    openTime, closeTime, secondOpenTime, secondCloseTime, statusColors,
+    updatedAt: new Date().toISOString()
+  };
   PropertiesService.getScriptProperties().setProperty(SETTINGS_KEY, JSON.stringify(schedule));
   return postResult_(true, 'Horario guardado.', 'oasis-schedule-save');
 }
@@ -103,12 +115,14 @@ function getSchedule_() {
     try {
       const value = JSON.parse(stored);
       if (Array.isArray(value.days) && value.openTime && value.closeTime) {
+        value.secondOpenTime = value.secondOpenTime || '';
+        value.secondCloseTime = value.secondCloseTime || '';
         value.statusColors = { ...DEFAULT_STATUS_COLORS, ...(value.statusColors || {}) };
         return value;
       }
     } catch (error) {}
   }
-  return { days: [], openTime: '09:00', closeTime: '21:00', statusColors: { ...DEFAULT_STATUS_COLORS } };
+  return { days: [], openTime: '09:00', closeTime: '21:00', secondOpenTime: '', secondCloseTime: '', statusColors: { ...DEFAULT_STATUS_COLORS } };
 }
 
 function validStatusColors_(colors) {
