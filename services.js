@@ -236,6 +236,16 @@ function syncAdmin(detail) {
   adminSession = detail || null;
   adminButton.hidden = !adminSession;
   saveButton.disabled = !validEndpoint || !adminSession?.idToken;
+  if (!adminSession) {
+    editor.hidden = true;
+    return;
+  }
+  editor.hidden = false;
+  renderRows();
+  renderStyleControls();
+  status.textContent = validEndpoint
+    ? 'Editor de servicios abierto. Podés cambiar precios, duración, tipografía, tamaño y colores.'
+    : 'Editor abierto. Para guardar los cambios en la página falta vincular la aplicación web de horarios en app-config.js.';
 }
 
 adminButton.addEventListener('click', () => {
@@ -244,8 +254,8 @@ adminButton.addEventListener('click', () => {
     renderRows();
     renderStyleControls();
     status.textContent = validEndpoint
-      ? 'Editá servicios y estilos; después guardá los cambios.'
-      : 'El editor está listo. Falta publicar y vincular el servicio de guardado.';
+      ? 'Editá servicios, horarios, precios y estilos; después guardá los cambios.'
+      : 'El editor está listo para editar. Para guardar los cambios en la página, falta vincular la aplicación web de horarios en app-config.js.';
   }
 });
 
