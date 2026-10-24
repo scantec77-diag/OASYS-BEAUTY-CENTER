@@ -13,7 +13,8 @@ const settingsForm = document.getElementById('availability-settings-form');
 const settingsStatus = document.getElementById('availability-settings-status');
 const saveButton = document.getElementById('availability-settings-save');
 const frame = document.getElementById('oasis-schedule-save-frame');
-const defaultSchedule = { days: [], openTime: '09:00', closeTime: '21:00' };
+const defaultColors = { unavailable: '#E5E7EB', available: '#FFFFFF', busy: '#FECACA', taken: '#BFDBFE' };
+const defaultSchedule = { days: [], openTime: '09:00', closeTime: '21:00', statusColors: { ...defaultColors } };
 const todayParts = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Argentina/Buenos_Aires',
   year: 'numeric', month: '2-digit', day: '2-digit'
@@ -60,6 +61,14 @@ function loadJSONP(params) {
     script.src = AVAILABILITY_ENDPOINT + '?' + query.toString();
     document.head.append(script);
   });
+}
+
+function applyStatusColors(colors = defaultColors) {
+  const root = document.documentElement;
+  root.style.setProperty('--status-unavailable', colors.unavailable || defaultColors.unavailable);
+  root.style.setProperty('--status-available', colors.available || defaultColors.available);
+  root.style.setProperty('--status-busy', colors.busy || defaultColors.busy);
+  root.style.setProperty('--status-taken', colors.taken || defaultColors.taken);
 }
 
 function renderMonth() {
@@ -116,13 +125,17 @@ function renderDay(busyIntervals = null) {
     status.textContent = 'Los días de atención todavía no están configurados.';
     return;
   }
+  const open = minutes(schedule.openTime);
+  const close = minutes(schedule.closeTime);
   if (!schedule.days.includes(weekday(selectedDate))) {
+    for (let start = open; start < close; start += 60) {
+      addSlot(start, Math.min(start + 60, close), 'unavailable', 'No disponible');
+    }
     status.textContent = 'Oasis no atiende este día.';
     return;
   }
 
-  const open = minutes(schedule.openTime);
-  const close = minutes(schedule.closeTime);
+
   if (busyIntervals === null) {
     for (let start = open; start < close; start += 60) {
       addSlot(start, Math.min(start + 60, close), 'pending', 'Consultando…');
@@ -167,7 +180,8 @@ async function refreshSelectedDay() {
     }
     const busy = (result.busy || []).map(item => ({
       start: new Date(item.start).getTime(),
-      end: new Date(item.end).getTime()
+      end: new Date(item.end).getTime(),
+      status: item.status || 'busy'
     }));
     renderDay(busy);
   } catch {
@@ -182,12 +196,18 @@ function renderEditor() {
   });
   document.getElementById('availability-open-time').value = schedule.openTime;
   document.getElementById('availability-close-time').value = schedule.closeTime;
+  const colors = schedule.statusColors || defaultColors;
+  for (const key of Object.keys(defaultColors)) {
+    document.getElementById('availability-color-' + key).value = colors[key] || defaultColors[key];
+  }
+  applyStatusColors(colors);
   saveButton.disabled = !validEndpoint || !adminSession?.idToken;
 }
 
 async function loadSettings() {
   if (!validEndpoint) {
-    schedule = { ...defaultSchedule };
+    schedule = { ...defaultSchedule, statusColors: { ...defaultColors } };
+    applyStatusColors(schedule.statusColors);
     scheduleLoaded = false;
     renderMonth();
     renderEditor();
@@ -200,7 +220,8 @@ async function loadSettings() {
     schedule = {
       days: Array.isArray(result.schedule.days) ? result.schedule.days.map(Number) : [],
       openTime: result.schedule.openTime || '09:00',
-      closeTime: result.schedule.closeTime || '21:00'
+      closeTime: result.schedule.closeTime || '21:00',
+      statusColors: { ...defaultColors, ...(result.schedule.statusColors || {}) }
     };
     scheduleLoaded = true;
     renderMonth();
@@ -243,7 +264,10 @@ settingsForm.addEventListener('submit', event => {
   form.action = AVAILABILITY_ENDPOINT;
   form.target = frame.name;
   form.hidden = true;
-  const fields = { action: 'saveSchedule', idToken: adminSession.idToken, days, openTime, closeTime };
+  const statusColors = Object.fromEntries(Object.keys(defaultColors).map(key => [
+    key, document.getElementById('availability-color-' + key).value
+  ]));
+  const fields = { action: 'saveSchedule', idToken: adminSession.idToken, days, openTime, closeTime, statusColors: JSON.stringify(statusColors) };
   for (const [name, value] of Object.entries(fields)) {
     const input = document.createElement('input');
     input.type = 'hidden';
@@ -287,6 +311,7 @@ next.addEventListener('click', () => {
   renderMonth();
 });
 
+applyStatusColors(schedule.statusColors);
 renderMonth();
 renderEditor();
 renderDay();
