@@ -14,13 +14,16 @@ const clientsSave = byId('admin-client-save');
 
 function publishAdminAuth(detail) {
   window.oasisAdminSession = detail;
-  for (const id of ['admin-services-button', 'admin-clients-button', 'availability-edit-button']) {
+  for (const id of ['admin-services-button', 'admin-clients-button', 'availability-edit-button', 'admin-manual-payment-button']) {
     const button = document.getElementById(id);
     if (button) button.hidden = !detail;
   }
   if (!detail && clientsEditor) {
     clientsEditor.hidden = true;
     clientsButton?.setAttribute('aria-expanded', 'false');
+    const paymentEditor = document.getElementById('admin-manual-payment-editor');
+    paymentEditor.hidden = true;
+    document.getElementById('admin-manual-payment-button')?.setAttribute('aria-expanded', 'false');
   }
   document.dispatchEvent(new CustomEvent('oasis:admin-auth', { detail }));
 }
@@ -66,6 +69,7 @@ if (!normalizedAdmins.length) {
   const { getFirestore, doc, getDocFromServer, setDoc, serverTimestamp } =
     await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
   const db = getFirestore(app);
+  window.oasisAdminServices = { auth, db };
   auth.languageCode = 'es';
 
   clientsForm.addEventListener('submit', async event => {
