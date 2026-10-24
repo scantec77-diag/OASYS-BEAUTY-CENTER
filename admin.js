@@ -8,6 +8,11 @@ const stats = byId('estadisticas');
 const normalizedAdmins = ADMIN_EMAILS.map(email => String(email).trim().toLowerCase()).filter(Boolean);
 
 function publishAdminAuth(detail) {
+  window.oasisAdminSession = detail;
+  for (const id of ['admin-services-button', 'availability-edit-button']) {
+    const button = document.getElementById(id);
+    if (button) button.hidden = !detail;
+  }
   document.dispatchEvent(new CustomEvent('oasis:admin-auth', { detail }));
 }
 
