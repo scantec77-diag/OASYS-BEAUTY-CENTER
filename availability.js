@@ -1,4 +1,4 @@
-import { APPS_SCRIPT_ENDPOINT } from './app-config.js';
+import { AVAILABILITY_ENDPOINT } from './app-config.js';
 
 const monthLabel = document.getElementById('availability-month');
 const grid = document.getElementById('availability-grid');
@@ -29,7 +29,7 @@ let adminSession = null;
 const spanishDate = new Intl.DateTimeFormat('es-AR', {
   timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
 });
-const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(APPS_SCRIPT_ENDPOINT);
+const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(AVAILABILITY_ENDPOINT);
 
 function isoDate(date) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -57,7 +57,7 @@ function loadJSONP(params) {
     window[callbackName] = finish;
     script.onerror = () => finish(null);
     const query = new URLSearchParams({ ...params, callback: callbackName });
-    script.src = APPS_SCRIPT_ENDPOINT + '?' + query.toString();
+    script.src = AVAILABILITY_ENDPOINT + '?' + query.toString();
     document.head.append(script);
   });
 }
@@ -240,7 +240,7 @@ settingsForm.addEventListener('submit', event => {
   }
   const form = document.createElement('form');
   form.method = 'POST';
-  form.action = APPS_SCRIPT_ENDPOINT;
+  form.action = AVAILABILITY_ENDPOINT;
   form.target = frame.name;
   form.hidden = true;
   const fields = { action: 'saveSchedule', idToken: adminSession.idToken, days, openTime, closeTime };
