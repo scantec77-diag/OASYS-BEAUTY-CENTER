@@ -6,12 +6,21 @@ const loginButton = byId('admin-google-login');
 const session = byId('admin-session');
 const stats = byId('estadisticas');
 const normalizedAdmins = ADMIN_EMAILS.map(email => String(email).trim().toLowerCase()).filter(Boolean);
+const clientsButton = byId('admin-clients-button');
+const clientsEditor = byId('admin-clients-editor');
+const clientsForm = byId('admin-client-form');
+const clientsStatus = byId('admin-client-status');
+const clientsSave = byId('admin-client-save');
 
 function publishAdminAuth(detail) {
   window.oasisAdminSession = detail;
-  for (const id of ['admin-services-button', 'availability-edit-button']) {
+  for (const id of ['admin-services-button', 'admin-clients-button', 'availability-edit-button']) {
     const button = document.getElementById(id);
     if (button) button.hidden = !detail;
+  }
+  if (!detail && clientsEditor) {
+    clientsEditor.hidden = true;
+    clientsButton?.setAttribute('aria-expanded', 'false');
   }
   document.dispatchEvent(new CustomEvent('oasis:admin-auth', { detail }));
 }
@@ -24,6 +33,18 @@ function showSignedOut(message) {
   publishAdminAuth(null);
   if (message) status.textContent = message;
 }
+
+clientsButton?.addEventListener('click', () => {
+  clientsEditor.hidden = false;
+  clientsButton.setAttribute('aria-expanded', 'true');
+  clientsEditor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  byId('admin-clients-title').focus({ preventScroll: true });
+});
+byId('admin-clients-close')?.addEventListener('click', () => {
+  clientsEditor.hidden = true;
+  clientsButton.setAttribute('aria-expanded', 'false');
+  clientsButton.focus();
+});
 
 if (!normalizedAdmins.length) {
   status.textContent = 'Falta configurar el Gmail administrador para habilitar el acceso.';
@@ -42,7 +63,47 @@ if (!normalizedAdmins.length) {
     appId: '1:26340609563:web:61aff5ee2cc95ec267b2be'
   }, 'oasys-admin');
   const auth = getAuth(app);
+  const { getFirestore, doc, getDocFromServer, setDoc, serverTimestamp } =
+    await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
+  const db = getFirestore(app);
   auth.languageCode = 'es';
+
+  clientsForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!clientsForm.reportValidity()) return;
+    const user = auth.currentUser;
+    const currentEmail = String(user?.email || '').trim().toLowerCase();
+    if (!user || !user.emailVerified || !normalizedAdmins.includes(currentEmail)) {
+      clientsStatus.textContent = 'Iniciá sesión con el Gmail administrador de Oasis para cargar clientes.';
+      return;
+    }
+    const nombre = byId('admin-client-name').value.trim().replace(/\s+/g, ' ');
+    const email = byId('admin-client-email').value.trim().toLowerCase();
+    const telefono = byId('admin-client-phone').value.trim();
+    if (!nombre || nombre.length > 80 || !/^[+() 0-9-]{7,25}$/.test(telefono)) {
+      clientsStatus.textContent = 'Revisá el nombre y el teléfono ingresados.';
+      return;
+    }
+    clientsSave.disabled = true;
+    clientsStatus.textContent = 'Guardando la ficha en la base de datos…';
+    try {
+      const customerRef = doc(db, 'clientesPorEmail', email);
+      const existing = await getDocFromServer(customerRef);
+      if (existing.exists()) {
+        clientsStatus.textContent = 'Ya existe una ficha para ese correo. No se modificó ningún dato.';
+        return;
+      }
+      await setDoc(customerRef, { email, nombre, telefono, createdAt: serverTimestamp() });
+      clientsForm.reset();
+      clientsStatus.textContent = 'Cliente guardado en la base de datos. Puede ingresar con ese mismo correo.';
+    } catch (error) {
+      clientsStatus.textContent = error?.code === 'permission-denied'
+        ? 'Firebase rechazó el guardado. Falta publicar firestore.customers.rules con permiso de carga para Oasis.'
+        : 'No se pudo guardar la ficha. Revisá la conexión con Firestore y volvé a intentar.';
+    } finally {
+      clientsSave.disabled = false;
+    }
+  });
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
