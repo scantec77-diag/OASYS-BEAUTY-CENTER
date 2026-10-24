@@ -1,5 +1,5 @@
 import { AVAILABILITY_ENDPOINT } from './app-config.js';
-const { addDoc, collection, getDocsFromServer, query, serverTimestamp, where } =
+const { addDoc, collection, doc, getDocFromServer, getDocsFromServer, query, serverTimestamp, setDoc, where } =
   await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
 
 const depositElement = document.getElementById('stats-deposits');
@@ -119,6 +119,10 @@ depositForm?.addEventListener('submit', async event => {
     depositStatus.textContent = 'Iniciá sesión con la cuenta administradora de Oasis.';
     return;
   }
+  if (!/^[a-f0-9-]{36}$/i.test(reference)) {
+    depositStatus.textContent = 'Ingresá la referencia de reserva que aparece al confirmar el turno.';
+    return;
+  }
   if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
     depositStatus.textContent = 'Ingresá un importe válido en pesos.';
     return;
@@ -130,7 +134,13 @@ depositForm?.addEventListener('submit', async event => {
   depositSave.disabled = true;
   depositStatus.textContent = 'Guardando la seña recibida…';
   try {
-    await addDoc(collection(db, 'senasRecibidas'), {
+    const depositRef = doc(db, 'senasRecibidas', reference);
+    const existing = await getDocFromServer(depositRef);
+    if (existing.exists()) {
+      depositStatus.textContent = 'Esa reserva ya tiene una seña registrada. No se duplicó el ingreso.';
+      return;
+    }
+    await setDoc(depositRef, {
       referencia: reference,
       cliente: client,
       monto: amount,
@@ -338,6 +348,7 @@ window.addEventListener('message', event => {
 
 document.addEventListener('oasis:admin-auth', event => {
   adminSession = event.detail || null;
+  if (depositButton) depositButton.hidden = !adminSession;
   if (adminSession?.idToken) {
     refreshAdminAgenda();
     refreshManualIncome();
