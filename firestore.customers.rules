@@ -103,7 +103,9 @@ service cloud.firestore {
     match /senasRecibidas/{depositId} {
       allow get, list: if isOasisAdmin();
       allow create: if isOasisAdmin()
-        && depositId.matches('^[a-fA-F0-9-]{36},'cliente','monto','dayKey','createdAt','createdBy'])
+        && depositId.matches('^[a-fA-F0-9-]{36}$')
+        && request.resource.data.referencia == depositId
+        && request.resource.data.keys().hasAll(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
         && request.resource.data.keys().hasOnly(['referencia','cliente','monto','dayKey','createdAt','createdBy'])
         && request.resource.data.referencia is string
         && request.resource.data.referencia.size() > 0
@@ -115,7 +117,13 @@ service cloud.firestore {
         && request.resource.data.monto > 0
         && request.resource.data.monto <= 100000000
         && request.resource.data.dayKey is string
-        && request.resource.data.dayKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}
+        && request.resource.data.dayKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.createdBy == request.auth.token.email.lower();
+      allow update, delete: if false;
+    }
+
+    match /pagosManuales/{paymentId} {
       allow get, list: if isOasisAdmin();
       allow create: if isOasisAdmin() && isValidManualPayment(request.resource.data);
       allow update, delete: if false;
