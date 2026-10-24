@@ -16,7 +16,7 @@ const CONFIG = {
     "Alisado medio (hasta los hombros)": 120,
     "Alisado largo (desde los hombros en adelante)": 180
   }, // Duraciones cargadas; los otros servicios esperan confirmación.
-  hours: {}, // Pendiente: 0=domingo...6=sábado. Formato: 1: ['09:00', '18:00']
+  hours: {}, // Cargar manualmente: omitir días cerrados; ej. 1: [['09:00','13:00'], ['14:00','18:00']]
   maxDaysAhead: 90
 };
 function page(message) {
@@ -47,7 +47,7 @@ function doPost(e) {
       return page('Las reservas todavía no están habilitadas. Falta configurar los tratamientos y horarios del centro.');
     const duration = Object.prototype.hasOwnProperty.call(CONFIG.services, servicio) ? CONFIG.services[servicio] : 0;
     if (!Number.isInteger(duration) || duration < 5 || duration > 480)
-      return page('Ese tratamiento todavía no está habilitado. Consultá al centro por su nombre y duración.');
+      return page('La duración de ese tratamiento todavía no está cargada. Contactá al centro para coordinarlo manualmente.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(p.fecha || '') || !/^([01]\d|2[0-3]):[0-5]\d$/.test(p.hora || ''))
       return page('La fecha o el horario no son válidos.');
     const start = new Date(p.fecha + 'T' + p.hora + ':00-03:00');
@@ -57,11 +57,18 @@ function doPost(e) {
         start <= new Date() || start.getTime() > Date.now() + CONFIG.maxDaysAhead * 86400000)
       return page('Elegí una fecha futura dentro de los próximos 90 días.');
     const weekday = new Date(p.fecha + 'T12:00:00Z').getUTCDay();
-    const hours = CONFIG.hours[weekday];
-    if (!Array.isArray(hours) || hours.length !== 2 || !hours.every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) ||
-        start < new Date(p.fecha + 'T' + hours[0] + ':00-03:00') ||
-        end > new Date(p.fecha + 'T' + hours[1] + ':00-03:00'))
-      return page('El tratamiento no entra dentro del horario de atención de ese día. Elegí otro horario.');
+    const configuredHours = CONFIG.hours[weekday];
+    const ranges = Array.isArray(configuredHours) && typeof configuredHours[0] === 'string'
+      ? [configuredHours] : configuredHours;
+    const fitsWorkingHours = Array.isArray(ranges) && ranges.some(range =>
+      Array.isArray(range) && range.length === 2 &&
+      range.every(t => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) &&
+      range[0] < range[1] &&
+      start >= new Date(p.fecha + 'T' + range[0] + ':00-03:00') &&
+      end <= new Date(p.fecha + 'T' + range[1] + ':00-03:00')
+    );
+    if (!fitsWorkingHours)
+      return page('Ese día o horario no está habilitado por el centro. Elegí otro horario.');
     locked = lock.tryLock(15000);
     if (!locked) return page('Hay otra reserva en proceso. Esperá unos segundos y volvé a enviar.');
     const calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
