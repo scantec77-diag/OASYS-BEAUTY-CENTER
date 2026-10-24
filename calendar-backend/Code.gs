@@ -189,6 +189,9 @@ function doPost(e) {
       return page('Tu solicitud ya había quedado registrada en este horario. No se creó un turno duplicado.');
     if (events.length)
       return page('Ese horario está ocupado o bloqueado. No se guardó la reserva; elegí otro horario.');
+    const requestedDeposit = Number(String(p.montoSena || '').replace(',', '.'));
+    const depositText = Number.isFinite(requestedDeposit) && requestedDeposit > 0 && requestedDeposit <= 100000000
+      ? '$ ' + requestedDeposit.toLocaleString('es-AR') : 'a confirmar';
     calendar.createEvent('Turno web · ' + servicio, start, end, {
       description: marker + '\nCliente: ' + nombre + '\nTeléfono: ' + telefono +
         '\nTratamiento: ' + servicio + '\nEstado: pendiente de confirmación del centro y seña.'
