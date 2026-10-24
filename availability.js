@@ -29,7 +29,7 @@ let visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 let selectedDate = new Date(today);
 let schedule = { ...defaultSchedule };
 let scheduleLoaded = false;
-let adminSession = null;
+let adminSession = window.oasisAdminSession || null;
 
 const spanishDate = new Intl.DateTimeFormat('es-AR', {
   timeZone: 'America/Argentina/Buenos_Aires', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -349,15 +349,17 @@ window.addEventListener('message', event => {
   if (event.data.ok) window.setTimeout(loadSettings, 400);
 });
 
-document.addEventListener('oasis:admin-auth', event => {
-  adminSession = event.detail || null;
+function syncAdminSession(detail) {
+  adminSession = detail || null;
   editButton.hidden = !adminSession;
   saveButton.disabled = !validEndpoint || !adminSession?.idToken;
   if (adminSession) settingsStatus.textContent = validEndpoint
     ? 'Elegí los días y el horario de atención.'
     : 'Falta publicar y vincular el servicio de horarios.';
   else settingsStatus.textContent = '';
-});
+}
+document.addEventListener('oasis:admin-auth', event => syncAdminSession(event.detail));
+if (adminSession) syncAdminSession(adminSession);
 
 previous.addEventListener('click', () => {
   visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
