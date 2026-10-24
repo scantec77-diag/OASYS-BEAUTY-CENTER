@@ -194,7 +194,7 @@ function doPost(e) {
       ? '$ ' + requestedDeposit.toLocaleString('es-AR') : 'a confirmar';
     calendar.createEvent('Turno web · ' + servicio, start, end, {
       description: marker + '\nCliente: ' + nombre + '\nTeléfono: ' + telefono +
-        '\nTratamiento: ' + servicio + '\nEstado: pendiente de confirmación del centro y seña.'
+        '\nTratamiento: ' + servicio + '\nSeña solicitada: ' + depositText + '\nSeña recibida: pendiente de verificar' + '\nEstado: pendiente de confirmación del centro.'
     });
     return page('Solicitud registrada en la agenda para el ' + p.fecha + ' a las ' + p.hora +
       ' (hora de Argentina). El horario quedó retenido; falta la confirmación del centro y la seña. Referencia: ' + id);
