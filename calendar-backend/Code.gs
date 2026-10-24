@@ -1,4 +1,4 @@
-// Copiar en Code.gs de Google Apps Script. Completar servicios y horarios reales.
+// Copiar en Code.gs de Google Apps Script. Los horarios y cuatro duraciones siguen pendientes.
 const CONFIG = {
   calendarId: '04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq@group.calendar.google.com',
   services: {
