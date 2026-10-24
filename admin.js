@@ -95,7 +95,12 @@ if (!normalizedAdmins.length) {
     session.hidden = false;
     stats.hidden = false;
     status.textContent = 'Acceso de administrador habilitado.';
-    const idToken = await user.getIdToken();
-    publishAdminAuth({ email: user.email, idToken });
+    publishAdminAuth({ email: user.email, idToken: null });
+    try {
+      const idToken = await user.getIdToken();
+      publishAdminAuth({ email: user.email, idToken });
+    } catch {
+      status.textContent = 'Sesión de administración abierta; no se pudo habilitar el guardado todavía.';
+    }
   });
 }
