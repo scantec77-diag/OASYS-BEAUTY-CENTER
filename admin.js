@@ -7,7 +7,7 @@ const session = byId('admin-session');
 const stats = byId('estadisticas');
 const normalizedAdmins = ADMIN_EMAILS.map(email => String(email).trim().toLowerCase()).filter(Boolean);
 
-function showSignedOut(message) {
+function publishAdminAuth(detail) {\n  document.dispatchEvent(new CustomEvent('oasis:admin-auth', { detail }));\n}\n\nfunction showSignedOut(message) {
   byId('admin-email').textContent = '';
   session.hidden = true;
   loginButton.hidden = false;
@@ -84,6 +84,6 @@ if (!normalizedAdmins.length) {
     loginButton.hidden = true;
     session.hidden = false;
     stats.hidden = false;
-    status.textContent = 'Acceso de administrador habilitado.';
+    status.textContent = 'Acceso de administrador habilitado.';\n    const idToken = await user.getIdToken();\n    publishAdminAuth({ email: user.email, idToken });
   });
 }
