@@ -79,6 +79,27 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
+    match /configuracionPublica/{configId} {
+      // The booking page needs the current deposit amount and payment destination.
+      allow get: if configId == 'senas';
+      allow list: if false;
+      allow create, update: if isOasisAdmin()
+        && configId == 'senas'
+        && request.resource.data.keys().hasAll(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
+        && request.resource.data.keys().hasOnly(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount <= 100000000
+        && request.resource.data.walletName is string && request.resource.data.walletName.size() <= 60
+        && request.resource.data.accountHolder is string && request.resource.data.accountHolder.size() <= 100
+        && request.resource.data.alias is string && request.resource.data.alias.size() <= 80
+        && request.resource.data.cbuCvu is string && request.resource.data.cbuCvu.size() <= 40
+        && request.resource.data.paymentLink is string && request.resource.data.paymentLink.size() <= 500
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.token.email.lower();
+      allow delete: if false;
+    }
+
     match /pagosManuales/{paymentId} {
       allow get, list: if isOasisAdmin();
       allow create: if isOasisAdmin() && isValidManualPayment(request.resource.data);
