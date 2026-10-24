@@ -15,6 +15,14 @@ const paymentForm = document.getElementById('admin-manual-payment-form');
 const paymentAmount = document.getElementById('admin-manual-payment-amount');
 const paymentSave = document.getElementById('admin-manual-payment-save');
 const paymentStatus = document.getElementById('admin-manual-payment-status');
+const depositButton = document.getElementById('admin-confirm-deposit-button');
+const depositEditor = document.getElementById('admin-confirm-deposit-editor');
+const depositForm = document.getElementById('admin-confirm-deposit-form');
+const depositReference = document.getElementById('admin-confirm-deposit-reference');
+const depositClient = document.getElementById('admin-confirm-deposit-client');
+const depositAmount = document.getElementById('admin-confirm-deposit-amount');
+const depositSave = document.getElementById('admin-confirm-deposit-save');
+const depositStatus = document.getElementById('admin-confirm-deposit-status');
 const money = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
 const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(AVAILABILITY_ENDPOINT);
 let adminSession = window.oasisAdminSession || null;
@@ -58,6 +66,89 @@ async function refreshManualIncome() {
     return false;
   }
 }
+
+async function refreshDeposits() {
+  if (!adminSession?.idToken) return false;
+  const db = window.oasisAdminServices?.db;
+  if (!db) return false;
+  try {
+    const dayKey = buenosAiresDayKey();
+    const dailyDeposits = query(
+      collection(db, 'senasRecibidas'),
+      where('dayKey', '==', dayKey)
+    );
+    const snapshot = await getDocsFromServer(dailyDeposits);
+    const total = snapshot.docs.reduce((sum, item) => {
+      const amount = Number(item.data().monto);
+      return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+    }, 0);
+    depositElement.dataset.value = String(total);
+    depositElement.textContent = '$ ' + money.format(total);
+    updateTotal();
+    depositStatus.textContent = 'Señas recibidas de hoy actualizadas.';
+    return true;
+  } catch (error) {
+    depositStatus.textContent = error?.code === 'permission-denied'
+      ? 'Firebase todavía no permite consultar señas. Publicá las reglas actualizadas de Firestore.'
+      : 'No se pudo actualizar el total de señas.';
+    return false;
+  }
+}
+
+depositButton?.addEventListener('click', () => {
+  depositEditor.hidden = false;
+  depositButton.setAttribute('aria-expanded', 'true');
+  depositEditor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('admin-confirm-deposit-title').focus({ preventScroll: true });
+});
+document.getElementById('admin-confirm-deposit-close')?.addEventListener('click', () => {
+  depositEditor.hidden = true;
+  depositButton.setAttribute('aria-expanded', 'false');
+  depositButton.focus();
+});
+depositForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!depositForm.reportValidity()) return;
+  const reference = depositReference.value.trim();
+  const client = depositClient.value.trim().replace(/\\s+/g, ' ');
+  const amount = Number(depositAmount.value);
+  const user = window.oasisAdminServices?.auth?.currentUser;
+  const email = String(user?.email || '').trim().toLowerCase();
+  const db = window.oasisAdminServices?.db;
+  if (!adminSession?.idToken || !user?.emailVerified || email !== 'oasysbeautycenter@gmail.com') {
+    depositStatus.textContent = 'Iniciá sesión con la cuenta administradora de Oasis.';
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
+    depositStatus.textContent = 'Ingresá un importe válido en pesos.';
+    return;
+  }
+  if (!db) {
+    depositStatus.textContent = 'No se pudo conectar con Firestore.';
+    return;
+  }
+  depositSave.disabled = true;
+  depositStatus.textContent = 'Guardando la seña recibida…';
+  try {
+    await addDoc(collection(db, 'senasRecibidas'), {
+      referencia: reference,
+      cliente: client,
+      monto: amount,
+      dayKey: buenosAiresDayKey(),
+      createdAt: serverTimestamp(),
+      createdBy: email
+    });
+    depositForm.reset();
+    await refreshDeposits();
+    depositStatus.textContent = 'Seña de $ ' + money.format(amount) + ' vinculada a la reserva ' + reference + '. Total actualizado.';
+  } catch (error) {
+    depositStatus.textContent = error?.code === 'permission-denied'
+      ? 'Firebase rechazó el registro. Publicá las reglas actualizadas de Firestore.'
+      : 'No se pudo guardar la seña. Revisá la conexión y volvé a intentar.';
+  } finally {
+    depositSave.disabled = false;
+  }
+});
 
 paymentButton.addEventListener('click', () => {
   paymentEditor.hidden = false;
@@ -250,13 +341,18 @@ document.addEventListener('oasis:admin-auth', event => {
   if (adminSession?.idToken) {
     refreshAdminAgenda();
     refreshManualIncome();
+    refreshDeposits();
   }
   else {
     adminStatus.textContent = '';
     paymentEditor.hidden = true;
     paymentButton.setAttribute('aria-expanded', 'false');
+    if (depositEditor) depositEditor.hidden = true;
+    depositButton?.setAttribute('aria-expanded', 'false');
     manualElement.dataset.value = '';
     manualElement.textContent = '$ —';
+    depositElement.dataset.value = '';
+    depositElement.textContent = '$ —';
     adminList.replaceChildren();
     renderCompletedCounts({});
   }
@@ -270,5 +366,5 @@ for (const element of [depositElement, manualElement]) {
     characterData: true, subtree: true
   });
 }
-if (adminSession?.idToken) { refreshAdminAgenda(); refreshManualIncome(); }
-window.setInterval(() => { refreshAdminAgenda(); refreshManualIncome(); }, 30000);
+if (adminSession?.idToken) { refreshAdminAgenda(); refreshManualIncome(); refreshDeposits(); }
+window.setInterval(() => { refreshAdminAgenda(); refreshManualIncome(); refreshDeposits(); }, 30000);
