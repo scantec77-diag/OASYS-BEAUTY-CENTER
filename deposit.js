@@ -2,6 +2,7 @@ const byId = id => document.getElementById(id);
 const depositPanel = byId('booking-deposit');
 const amountLabel = byId('booking-deposit-amount');
 const walletDetails = byId('booking-wallet-details');
+const paymentLink = byId('booking-deposit-link');
 const depositInput = byId('booking-deposit-amount-value');
 const status = byId('booking-deposit-status');
 const adminButton = byId('admin-deposit-button');
@@ -38,6 +39,14 @@ function renderPublicSettings(value) {
   amountLabel.textContent = '$ ' + money.format(amount);
   depositInput.value = String(amount);
   status.textContent = 'Este importe se descontará del valor del servicio.';
+  const linkUrl = String(settings.paymentLink || '').trim();
+  if (paymentLink) {
+    try {
+      const url = new URL(linkUrl);
+      paymentLink.hidden = url.protocol !== 'https:';
+      if (!paymentLink.hidden) paymentLink.href = url.href;
+    } catch { paymentLink.hidden = true; paymentLink.removeAttribute('href'); }
+  }
   const lines = [];
   if (settings.walletName) lines.push('Billetera: ' + settings.walletName);
   if (settings.accountHolder) lines.push('Titular: ' + settings.accountHolder);
