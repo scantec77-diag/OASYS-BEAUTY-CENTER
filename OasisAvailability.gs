@@ -55,8 +55,27 @@ function doPost(e) {
   const params = e.parameter || {};
   const action = String(params.action || '');
   const email = verifyAdmin_(String(params.idToken || ''));
-  if (!email) return postResult_(false, 'No se pudo verificar la cuenta administradora.',
-    action === 'saveServices' ? 'oasis-services-save' : 'oasis-schedule-save');
+  const resultType = action === 'saveServices' ? 'oasis-services-save'
+    : action === 'saveSchedule' ? 'oasis-schedule-save' : 'oasis-service-agenda';
+  if (!email) return postResult_(false, 'No se pudo verificar la cuenta administradora.', resultType);
+
+  if (action === 'loadServiceAgenda') {
+    try {
+      const agenda = getAdminServiceAgenda_();
+      return postResult_(true, 'Agenda actualizada.', resultType, agenda);
+    } catch (error) {
+      return postResult_(false, 'No se pudo consultar la agenda del centro.', resultType);
+    }
+  }
+
+  if (action === 'markServiceDone') {
+    try {
+      const result = markServiceDone_(String(params.eventId || ''));
+      return postResult_(true, result.message, resultType, getAdminServiceAgenda_());
+    } catch (error) {
+      return postResult_(false, 'No se pudo marcar el servicio como realizado.', resultType);
+    }
+  }
 
   if (action === 'saveServices') {
     try {
@@ -99,6 +118,96 @@ function doPost(e) {
   };
   PropertiesService.getScriptProperties().setProperty(SETTINGS_KEY, JSON.stringify(schedule));
   return postResult_(true, 'Horario guardado.', 'oasis-schedule-save');
+}
+
+function getAdminServiceAgenda_() {
+  const calendar = CalendarApp.getCalendarById(CALENDAR_ID);
+  if (!calendar) throw new Error('calendar_unavailable');
+
+  const now = new Date();
+  const start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+  const end = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  const ledger = getCompletedServiceLedger_();
+  const appointments = calendar.getEvents(start, end)
+    .map(event => {
+      const description = event.getDescription() || '';
+      const service = serviceNameFromEvent_(event);
+      return {
+        id: event.getId(),
+        service,
+        start: event.getStartTime().toISOString(),
+        end: event.getEndTime().toISOString(),
+        description,
+        done: description.includes('OASIS_SERVICE_DONE:') || Boolean(ledger.eventIds[event.getId()])
+      };
+    })
+    .filter(item => item.description.includes('OASIS_REQUEST:') && item.service && !item.done && new Date(item.end) <= now)
+    .map(({ id, service, start }) => ({ id, service, start }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  return { counts: ledger.counts, appointments };
+}
+
+function markServiceDone_(eventId) {
+  if (!eventId || eventId.length > 200) throw new Error('invalid_event_id');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) throw new Error('busy');
+  try {
+    const calendar = CalendarApp.getCalendarById(CALENDAR_ID);
+    if (!calendar) throw new Error('calendar_unavailable');
+    const event = calendar.getEventById(eventId);
+    if (!event) {
+      throw new Error('event_not_found');
+    }
+    let description = event.getDescription() || '';
+    if (!description.includes('OASIS_REQUEST:')) throw new Error('not_oasis_booking');
+    const service = serviceNameFromEvent_(event);
+    if (!service) throw new Error('service_missing');
+
+    const ledger = getCompletedServiceLedger_();
+    const alreadyCounted = Boolean(ledger.eventIds[eventId]);
+    if (!alreadyCounted) {
+      ledger.eventIds[eventId] = service;
+      ledger.counts[service] = Number(ledger.counts[service] || 0) + 1;
+      PropertiesService.getScriptProperties().setProperty(
+        'OASIS_COMPLETED_SERVICE_LEDGER', JSON.stringify(ledger)
+      );
+    }
+    if (!description.includes('OASIS_SERVICE_DONE:')) {
+      description += (description ? '\n' : '') + 'OASIS_SERVICE_DONE:' + new Date().toISOString();
+      event.setDescription(description);
+    }
+    return {
+      message: alreadyCounted
+        ? 'El servicio ya estaba registrado como realizado.'
+        : 'Servicio marcado como realizado y contador actualizado.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getCompletedServiceLedger_() {
+  const raw = PropertiesService.getScriptProperties().getProperty('OASIS_COMPLETED_SERVICE_LEDGER');
+  if (raw) {
+    try {
+      const value = JSON.parse(raw);
+      if (value && typeof value === 'object') {
+        return {
+          counts: value.counts && typeof value.counts === 'object' ? value.counts : {},
+          eventIds: value.eventIds && typeof value.eventIds === 'object' ? value.eventIds : {}
+        };
+      }
+    } catch (error) {}
+  }
+  return { counts: {}, eventIds: {} };
+}
+
+function serviceNameFromEvent_(event) {
+  const description = event.getDescription() || '';
+  const match = description.match(/(?:^|\n)Tratamiento:\s*([^\n]+)/i);
+  if (match) return match[1].trim();
+  return String(event.getTitle() || '').replace(/^Turno web\s*[·-]\s*/i, '').trim();
 }
 
 function verifyAdmin_(idToken) {
@@ -235,8 +344,9 @@ function jsonp(callback, data) {
     .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
-function postResult_(ok, message, type) {
-  const payload = JSON.stringify({ type, ok, message });
+function postResult_(ok, message, type, data) {
+  const payload = JSON.stringify({ type, ok, message, data })
+    .replace(/</g, '\\u003c');
   const html = '<!doctype html><meta charset="utf-8"><script>parent.postMessage(' + payload +
     ', "https://scantec77-diag.github.io");</script>';
   return HtmlService.createHtmlOutput(html);
