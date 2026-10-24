@@ -238,28 +238,27 @@ function syncAdmin(detail) {
   saveButton.disabled = !validEndpoint || !adminSession?.idToken;
   if (!adminSession) {
     editor.hidden = true;
-    return;
+    adminButton.setAttribute('aria-expanded', 'false');
   }
-  editor.hidden = false;
-  renderRows();
-  renderStyleControls();
-  status.textContent = validEndpoint
-    ? 'Editor de servicios abierto. Podés cambiar precios, duración, tipografía, tamaño y colores.'
-    : 'Editor abierto. Para guardar los cambios en la página falta vincular la aplicación web de horarios en app-config.js.';
 }
 
 adminButton.addEventListener('click', () => {
-  editor.hidden = !editor.hidden;
-  if (!editor.hidden) {
-    renderRows();
-    renderStyleControls();
-    status.textContent = validEndpoint
-      ? 'Editá servicios, horarios, precios y estilos; después guardá los cambios.'
-      : 'El editor está listo para editar. Para guardar los cambios en la página, falta vincular la aplicación web de horarios en app-config.js.';
-  }
+  editor.hidden = false;
+  adminButton.setAttribute('aria-expanded', 'true');
+  renderRows();
+  renderStyleControls();
+  status.textContent = validEndpoint
+    ? 'Editá servicios, precios, duración, tipografía, tamaño y colores; después guardá los cambios.'
+    : 'Editá y revisá los servicios y sus estilos. Para guardar los cambios en la página falta vincular la aplicación web de horarios en app-config.js.';
+  editor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('admin-services-title').focus({ preventScroll: true });
 });
 
-closeButton.addEventListener('click', () => { editor.hidden = true; });
+closeButton.addEventListener('click', () => {
+  editor.hidden = true;
+  adminButton.setAttribute('aria-expanded', 'false');
+  adminButton.focus();
+});
 
 addButton.addEventListener('click', () => {
   const id = 'new-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
