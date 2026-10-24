@@ -1,16 +1,33 @@
-// PROTOTYPE for Firestore Standard (default); verify target and existing rules first.
-// clientesWeb/{uid}: uid string <=128, email string <=254, nombre 1..80,
-// telefono 7..25, createdAt timestamp. All fields required and immutable.
-// clientesPorEmail/{email}: trusted historical record; document ID must exactly match the verified Firebase Auth email.
-// Only the verified owner of that exact email can get the document; no list or client writes.
-// Users can only create/read their own verified profile. No updates/deletes/list.
+// Prototype for the default Firestore database; confirm its edition and deploy rules before use.
+// Data model:
+// clientesWeb/{uid}: uid, email, nombre (1..80), telefono (7..25), createdAt.
+//   Customers can only create and read their own verified profile; no list/update/delete.
+// clientesPorEmail/{email-lowercase}: email, nombre (1..80), telefono (7..25), createdAt.
+//   Oasis can create a manual record; the verified matching customer can read only their own record.
+// No collection listing or customer-side writes are allowed.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner(uid) {
-      return request.auth != null && request.auth.uid == uid
+      return request.auth != null
+        && request.auth.uid == uid
         && request.auth.token.email_verified == true;
     }
+
+    function isOasisAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'oasysbeautycenter@gmail.com';
+    }
+
+    function isCustomerEmailOwner(email) {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == email;
+    }
+
     function isValidCustomer(d, uid) {
       return d.keys().hasAll(['uid','email','nombre','telefono','createdAt'])
         && d.keys().hasOnly(['uid','email','nombre','telefono','createdAt'])
@@ -24,18 +41,35 @@ service cloud.firestore {
         && d.telefono.matches('^[+() 0-9-]{7,25}$')
         && d.createdAt is timestamp && d.createdAt == request.time;
     }
+
+    function isValidManualCustomer(data, email) {
+      return data.keys().hasAll(['email','nombre','telefono','createdAt'])
+        && data.keys().hasOnly(['email','nombre','telefono','createdAt'])
+        && data.email is string && data.email.size() > 3 && data.email.size() <= 254
+        && data.email == email && data.email == email.lower()
+        && data.email.matches('^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}$')
+        && data.nombre is string && data.nombre.size() > 0 && data.nombre.size() <= 80
+        && data.nombre.matches('.*[^ ].*')
+        && data.telefono is string && data.telefono.size() >= 7 && data.telefono.size() <= 25
+        && data.telefono.matches('^[+() 0-9-]{7,25}$')
+        && data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
     match /clientesWeb/{uid} {
       allow get: if isOwner(uid);
       allow create: if isOwner(uid) && isValidCustomer(request.resource.data, uid);
       allow list, update, delete: if false;
     }
+
     match /clientesPorEmail/{email} {
-      // Legacy records are imported by the center; a verified customer can only read their own email record.
-      allow get: if request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email == email;
-      allow list, create, update, delete: if false;
+      // Admin may load a record. A verified customer may read only their own email record.
+      allow get: if isCustomerEmailOwner(email) || isOasisAdmin();
+      allow create: if isOasisAdmin() && isValidManualCustomer(request.resource.data, email);
+      allow list, update, delete: if false;
     }
-    match /{document=**} { allow read, write: if false; }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
