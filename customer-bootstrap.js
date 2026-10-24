@@ -1,7 +1,7 @@
 import { CUSTOMERS_ENABLED } from './customer-config.js';
 const status = document.getElementById('customer-status');
 if (CUSTOMERS_ENABLED) {
-  import('./customers.js').catch(() => {
+  import('./customers.js?v=20261024-1').catch(() => {
     status.textContent = 'No pudimos cargar el acceso de clientes. Revisá tu conexión y recargá la página.';
     document.getElementById('customer-send').disabled = true;
   });
