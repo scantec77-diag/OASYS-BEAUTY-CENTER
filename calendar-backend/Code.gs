@@ -1,8 +1,22 @@
 // Copiar en Code.gs de Google Apps Script. Completar servicios y horarios reales.
 const CONFIG = {
   calendarId: '04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq@group.calendar.google.com',
-  services: {}, // Formato: 'Nombre exacto del tratamiento': minutos
-  hours: {}, // 0=domingo...6=sábado. Formato: 1: ['09:00', '18:00']
+  services: {
+    "Manicuría + semipermanente": 120,
+    "Manicuría + capping gel": 120,
+    "Manicuría + capping Acrygel": 120,
+    "Manicuría básica sin esmaltado": 60,
+    "Esculpidas Acrygel cortas + semipermanente (sin decoraciones)": 180,
+    "Esculpidas largas + semipermanente (sin decoraciones)": 240,
+    "Servicio de esculpidas cortas (reparación/reemplazo de 1 uña en total)": 240,
+    "Servicio de esculpidas largas (reparación/reemplazo de 1 uña en total)": 240,
+    "Lifting de pestañas": 60,
+    "Lifting + tinte": 90,
+    "Alisado corto (debajo de las orejas)": 120,
+    "Alisado medio (hasta los hombros)": 120,
+    "Alisado largo (desde los hombros en adelante)": 180
+  }, // Duraciones cargadas; los otros servicios esperan confirmación.
+  hours: {}, // Pendiente: 0=domingo...6=sábado. Formato: 1: ['09:00', '18:00']
   maxDaysAhead: 90
 };
 function page(message) {
