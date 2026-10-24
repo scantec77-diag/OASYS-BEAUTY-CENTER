@@ -1,6 +1,8 @@
 // PROTOTYPE for Firestore Standard (default); verify target and existing rules first.
 // clientesWeb/{uid}: uid string <=128, email string <=254, nombre 1..80,
 // telefono 7..25, createdAt timestamp. All fields required and immutable.
+// clientesPorEmail/{emailLowercase}: trusted legacy customer record imported by Oasis.
+// Only the verified owner of that exact email can get the document; no list or client writes.
 // Users can only create/read their own verified profile. No updates/deletes/list.
 rules_version = '2';
 service cloud.firestore {
@@ -26,6 +28,13 @@ service cloud.firestore {
       allow get: if isOwner(uid);
       allow create: if isOwner(uid) && isValidCustomer(request.resource.data, uid);
       allow list, update, delete: if false;
+    }
+    match /clientesPorEmail/{email} {
+      // Legacy records are imported by the center; a verified customer can only read their own email record.
+      allow get: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == email;
+      allow list, create, update, delete: if false;
     }
     match /{document=**} { allow read, write: if false; }
   }
