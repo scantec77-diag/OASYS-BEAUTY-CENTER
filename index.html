@@ -7,4 +7,19 @@
 <form id="booking"><label for="nombre">Nombre</label><input id="nombre" required maxlength="80" autocomplete="name"><label for="servicio">Tratamiento deseado</label><input id="servicio" required maxlength="100" placeholder="¿Qué tratamiento te interesa?"><label for="fecha">Fecha preferida</label><input id="fecha" type="date" required><label for="hora">Horario preferido</label><input id="hora" type="time" required><button type="submit">Preparar consulta por WhatsApp</button></form><p id="resultado" role="status"></p></section>
 <section id="estadisticas" class="card" aria-labelledby="stats-title"><div class="stats-head"><h2 id="stats-title">Estadísticas del centro</h2><span class="pill">Vista preliminar · sin datos</span></div><p class="muted">Panel preparado para administración. Los indicadores se actualizarán cuando se conecte el sistema de reservas y pagos.</p><div class="stats-grid"><div class="stat"><span>Turnos de hoy</span><strong>—</strong></div><div class="stat"><span>Turnos del mes</span><strong>—</strong></div><div class="stat"><span>Ingresos confirmados</span><strong>—</strong></div><div class="stat"><span>Señas pendientes</span><strong>—</strong></div></div><p class="muted"><small>Sin conexión a base de datos. Este recuadro es una maqueta visible; se restringirá a administradores al implementar el inicio de sesión.</small></p></section>
 <section class="card"><h2>Contacto</h2><p>Próximamente: WhatsApp Business, dirección y redes sociales oficiales.</p></section></main><footer><small>© <span id="year"></span> Oasis Beauty Center · Sitio en preparación</small></footer>
-<script>document.getElementById('year').textContent=new Date().getFullYear();const fecha=document.getElementById('fecha');const local=new Date();local.setMinutes(local.getMinutes()-local.getTimezoneOffset());fecha.min=local.toISOString().slice(0,10);document.getElementById('booking').addEventListener('submit',e=>{e.preventDefault();const nombre=document.getElementById('nombre').value.trim(),servicio=document.getElementById('servicio').value.trim(),dia=fecha.value,hora=document.getElementById('hora').value;if(!nombre||!servicio||!dia||!hora)return;const mensaje='Hola, soy '+nombre+'. Quisiera consultar disponibilidad para '+servicio+' el '+dia+' a las '+hora+'. ¿Me confirman disponibilidad y cómo abonar la seña?';const out=document.getElementById('resultado');out.textContent='Consulta preparada. Falta configurar el número oficial de WhatsApp Business para enviarla: '+mensaje;});</script></body></html>
+<script>document.getElementById('year').textContent=new Date().getFullYear();const fecha=document.getElementById('fecha');const local=new Date();local.setMinutes(local.getMinutes()-local.getTimezoneOffset());fecha.min=local.toISOString().slice(0,10);document.getElementById('booking').addEventListener('submit',e=>{e.preventDefault();const nombre=document.getElementById('nombre').value.trim(),servicio=document.getElementById('servicio').value.trim(),dia=fecha.value,hora=document.getElementById('hora').value;if(!nombre||!servicio||!dia||!hora)return;const mensaje='Hola, soy '+nombre+'. Quisiera consultar disponibilidad para '+servicio+' el '+dia+' a las '+hora+'. ¿Me confirman disponibilidad y cómo abonar la seña?';const out=document.getElementById('resultado');out.textContent='Consulta preparada. Falta configurar el número oficial de WhatsApp Business para enviarla: '+mensaje;});</script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po",
+    authDomain: "oasysbeautycenter.firebaseapp.com",
+    projectId: "oasysbeautycenter",
+    storageBucket: "oasysbeautycenter.firebasestorage.app",
+    messagingSenderId: "26340609563",
+    appId: "1:26340609563:web:61aff5ee2cc95ec267b2be"
+  };
+
+  const app = initializeApp(firebaseConfig);
+</script>
+</body></html>
