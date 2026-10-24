@@ -4,7 +4,7 @@ El formulario de index.html usa booking.js. No está activo hasta completar esto
 
 1. Con la cuenta de Google de Oasis, abrir https://script.google.com/ y crear un proyecto independiente llamado "Reservas Oasis".
 2. Copiar calendar-backend/Code.gs en el editor.
-3. Completar CONFIG.services con nombres exactos de tratamientos y duración en minutos, y CONFIG.hours con días y horas reales. Los ejemplos son formato, no horarios acordados. Esta versión atiende un turno a la vez, con una franja diaria.
+3. El catálogo de tratamientos y las duraciones informadas ya están cargados en CONFIG.services. Antes de habilitar, confirmar duración de Pedicuría sin semipermanente, Pedicuría + semipermanente, Limpieza / higiene facial y Maquillaje social; luego agregarlas al código. Completar CONFIG.hours con los días y horas reales: siguen pendientes de informar. Esta versión atiende un turno a la vez, con una franja diaria.
 4. Configurar la zona horaria del proyecto como America/Argentina/Buenos_Aires.
 5. Ejecutar checkCalendar y autorizar acceso al calendario. Comprobar el nombre registrado. Si falla, volver a copiar el ID desde Configuración → Integrar calendario: el ID actual es el recibido por chat y aún no se verificó contra Google.
 6. Implementar → Nueva implementación → Aplicación web. Ejecutar como la cuenta de Oasis; acceso: Cualquier persona. Autorizar con la cuenta propietaria. Mantener el calendario PRIVADO; no hace falta publicarlo.
@@ -15,7 +15,7 @@ El formulario de index.html usa booking.js. No está activo hasta completar esto
 Las solicitudes retienen el horario y quedan pendientes de confirmación del centro y seña. No se registra ningún pago ni se envían mensajes automáticamente. Todavía no se guarda historial de clientes en Firestore.
 
 ## Bloqueos y límites
-Cualquier evento existente, incluso de día completo, bloquea ese intervalo. Para bloquear un horario o día, crear un evento en Calendar. Los bloqueos y reservas comparten una única agenda/capacidad. El formulario todavía no muestra una lista de horarios libres: comprueba el horario elegido al enviar.
+Cualquier evento existente, incluso de día completo, bloquea ese intervalo. Para bloquear un horario o día, crear un evento en Calendar. Los bloqueos y reservas comparten una única agenda/capacidad. El formulario muestra el catálogo y permite elegir los servicios cuya duración ya se informó. Los cuatro servicios sin duración figuran en la lista, pero no se pueden reservar hasta completar ese dato. El formulario todavía no muestra una lista de horarios libres: comprueba el horario elegido al enviar.
 
 El bloqueo de ejecución serializa las reservas de este mismo Apps Script. Una edición simultánea desde Calendar u otro sistema puede causar un cruce: revisar los cambios manuales. El formulario público tiene un campo trampa básico, pero no verifica identidad ni implementa CAPTCHA. Antes de difundir masivamente, añadir protección contra abuso. No publicar el calendario con los datos de clientes.
 
