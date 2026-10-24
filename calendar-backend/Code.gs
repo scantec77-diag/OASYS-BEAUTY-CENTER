@@ -23,11 +23,121 @@ function page(message) {
   const safe = String(message).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   return HtmlService.createHtmlOutput('<!doctype html><html lang="es"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reserva Oasis</title><body style="font:18px system-ui;background:#fffaf3;color:#42392e;padding:32px;max-width:650px;margin:auto"><h1>Oasis Beauty Center</h1><p role="status">'+safe+'</p><p>Podés volver a la pestaña del formulario.</p></body></html>');
 }
-function doGet() { return page('Para solicitar un turno, usá el formulario de Oasis.'); }
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.action === 'weather') return getWeatherJsonp(p);
+  return page('Para solicitar un turno, usá el formulario de Oasis.');
+}
+
+function weatherJsonp(callback, data) {
+  const name = String(callback || '');
+  if (!/^oasisWeather_[A-Za-z0-9_]{1,80}$/.test(name)) {
+    return ContentService.createTextOutput('/* Invalid weather callback */')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  const json = JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  return ContentService.createTextOutput(name + '(' + json + ');')
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+function getWeatherJsonp(p) {
+  const callback = String(p.callback || '');
+  const latitude = Number(p.latitude);
+  const longitude = Number(p.longitude);
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return weatherJsonp(callback, {ok: false, error: 'invalid-location'});
+  }
+
+  // Keep weather resolution to roughly neighborhood level; never store GPS coordinates in a customer profile.
+  const lat = (Math.round(latitude * 100) / 100).toFixed(2);
+  const lon = (Math.round(longitude * 100) / 100).toFixed(2);
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'oasis-weather-v1:' + lat + ':' + lon;
+  const cached = cache.get(cacheKey);
+  if (cached) return weatherJsonp(callback, JSON.parse(cached));
+
+  const apiKey = PropertiesService.getScriptProperties().getProperty('WEATHER_API_KEY');
+  if (!apiKey) return weatherJsonp(callback, {ok: false, error: 'weather-not-configured'});
+  if (!reserveWeatherCall_()) return weatherJsonp(callback, {ok: false, error: 'weather-limit'});
+
+  try {
+    const url = 'https://api.weatherapi.com/v1/current.json?key=' + encodeURIComponent(apiKey) +
+      '&q=' + encodeURIComponent(lat + ',' + lon) + '&lang=es';
+    const response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+    if (response.getResponseCode() !== 200) {
+      return weatherJsonp(callback, {ok: false, error: 'weather-provider-unavailable'});
+    }
+    const source = JSON.parse(response.getContentText());
+    const result = {
+      ok: true,
+      location: {
+        name: String(source.location && source.location.name || ''),
+        region: String(source.location && source.location.region || ''),
+        country: String(source.location && source.location.country || '')
+      },
+      current: {
+        temp_c: Number(source.current && source.current.temp_c),
+        feelslike_c: Number(source.current && source.current.feelslike_c),
+        humidity: Number(source.current && source.current.humidity),
+        wind_kph: Number(source.current && source.current.wind_kph),
+        condition: {
+          text: String(source.current && source.current.condition && source.current.condition.text || ''),
+          code: Number(source.current && source.current.condition && source.current.condition.code)
+        },
+        last_updated: String(source.current && source.current.last_updated || '')
+      }
+    };
+    cache.put(cacheKey, JSON.stringify(result), 600);
+    return weatherJsonp(callback, result);
+  } catch (error) {
+    console.error('Weather lookup failed.');
+    return weatherJsonp(callback, {ok: false, error: 'weather-provider-unavailable'});
+  }
+}
+
+function reserveWeatherCall_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return false;
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const now = new Date();
+    const day = Utilities.formatDate(now, 'Etc/UTC', 'yyyy-MM-dd');
+    const month = Utilities.formatDate(now, 'Etc/UTC', 'yyyy-MM');
+    const savedDay = properties.getProperty('WEATHER_QUOTA_DAY') || '';
+    const savedMonth = properties.getProperty('WEATHER_QUOTA_MONTH') || '';
+    const dayCount = savedDay === day ? Number(properties.getProperty('WEATHER_QUOTA_DAY_COUNT') || 0) : 0;
+    const monthCount = savedMonth === month ? Number(properties.getProperty('WEATHER_QUOTA_MONTH_COUNT') || 0) : 0;
+    // Stay below the provider's free-plan ceiling even if the public endpoint is abused.
+    if (dayCount >= 2900 || monthCount >= 90000) return false;
+    properties.setProperties({
+      WEATHER_QUOTA_DAY: day,
+      WEATHER_QUOTA_DAY_COUNT: String(dayCount + 1),
+      WEATHER_QUOTA_MONTH: month,
+      WEATHER_QUOTA_MONTH_COUNT: String(monthCount + 1)
+    }, false);
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
 function checkCalendar() {
   const calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
   if (!calendar) throw new Error('No se encuentra el calendario. Revisá el ID y el acceso de la cuenta.');
   console.log('Calendario encontrado: ' + calendar.getName());
+}
+function checkWeatherApi() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('WEATHER_API_KEY');
+  if (!apiKey) throw new Error('Configurá WEATHER_API_KEY en Propiedades del script.');
+  const url = 'https://api.weatherapi.com/v1/current.json?key=' + encodeURIComponent(apiKey) +
+    '&q=Buenos%20Aires&lang=es';
+  const response = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
+  if (response.getResponseCode() !== 200)
+    throw new Error('WeatherAPI.com respondió con HTTP ' + response.getResponseCode() + '. Revisá la clave y el plan.');
+  console.log('WeatherAPI.com respondió correctamente. La clave no se mostró.');
 }
 function doPost(e) {
   const lock = LockService.getScriptLock();

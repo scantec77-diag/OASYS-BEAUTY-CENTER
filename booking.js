@@ -1,5 +1,6 @@
 /* Pegar aquí la URL /exec después de implementar el Apps Script de Oasis. */
-const BOOKING_ENDPOINT = '';
+import { APPS_SCRIPT_ENDPOINT } from './app-config.js';
+const BOOKING_ENDPOINT = APPS_SCRIPT_ENDPOINT;
 const booking = document.getElementById('booking');
 const result = document.getElementById('resultado');
 const submit = booking.querySelector('button[type="submit"]');

@@ -6,6 +6,21 @@ export function mountCustomers(api) {
   let legacyVerified = false;
   let link = api.isEmailLink(location.href) ? location.href : null;
   const message = text => { el('customer-status').textContent = text; };
+  const welcomeCard = el('welcome-card');
+  function setWelcome(data) {
+    const firstName = String(data?.nombre || '').trim().split(/\s+/)[0];
+    if (!firstName) {
+      welcomeCard.hidden = true;
+      return;
+    }
+    const hour = Number(new Intl.DateTimeFormat('es-AR', {
+      hour: '2-digit', hourCycle: 'h23'
+    }).format(new Date()));
+    const greeting = hour >= 5 && hour < 12 ? 'Buen día'
+      : hour >= 12 && hour < 20 ? 'Buenas tardes' : 'Buenas noches';
+    el('welcome-greeting').textContent = `${greeting}, ${firstName}`;
+    welcomeCard.hidden = false;
+  }
   const storage = {
     get() { try { return localStorage.getItem('oasis.pendingEmail') || ''; } catch { return ''; } },
     getMode() { try { return localStorage.getItem('oasis.pendingMode') || ''; } catch { return ''; } },
@@ -39,6 +54,7 @@ export function mountCustomers(api) {
   function resetProfile() {
     profile = null;
     legacyVerified = false;
+    setWelcome(null);
     el('customer-profile').hidden = true;
     el('customer-ready').hidden = true;
     el('customer-name').value = '';
@@ -47,6 +63,7 @@ export function mountCustomers(api) {
   }
   function showProfile(data) {
     profile = data;
+    setWelcome(data);
     el('customer-profile').hidden = true;
     el('customer-ready').hidden = false;
     el('customer-summary').textContent = `${data.nombre} · ${data.email}`;
