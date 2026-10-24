@@ -26,7 +26,29 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 #welcome-greeting{display:block;font-family:Georgia,serif;font-size:18px;font-weight:700;color:#244a70;margin-top:7px}
 .welcome-note{display:block;font-size:12px;color:#52677e;margin-top:3px}
 @media(max-width:720px){header{padding:14px 12px}.site-header-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"brand" "welcome" "weather";gap:10px}.site-brand{grid-area:brand}.site-logo{width:min(72vw,230px);max-height:132px}.weather-card{grid-area:weather;max-width:none}.welcome-card{grid-area:welcome;justify-self:stretch;max-width:none;text-align:left}.weather-privacy{max-width:none}}
- .admin-session strong{overflow-wrap:anywhere}#admin-google-login:disabled{opacity:.55;cursor:not-allowed}</style></head>
+ .admin-session strong{overflow-wrap:anywhere}#admin-google-login:disabled{opacity:.55;cursor:not-allowed}
+.availability-layout{display:grid;grid-template-columns:minmax(260px,1fr) minmax(280px,1fr);gap:20px;margin-top:18px}
+.availability-calendar,.availability-day-panel{border:1px solid #eadfcf;border-radius:14px;padding:14px;background:#fffdf9}
+.availability-monthbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.availability-monthbar button{margin:0;padding:7px 14px;min-width:42px}
+.availability-monthbar h3{text-align:center;text-transform:capitalize;margin:0;font-size:18px}
+.availability-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.availability-weekdays{margin-bottom:5px;text-align:center;color:#766b5d;font-size:12px}
+.availability-weekdays span{padding:6px 0}
+.availability-day{margin:0;padding:9px 2px;background:#fff;color:var(--ink);border:1px solid #eadfcf;border-radius:9px;min-height:40px}
+.availability-day[aria-pressed="true"]{background:#a78242;color:#fff;border-color:#a78242}
+.availability-day.today{box-shadow:inset 0 0 0 2px #a78242}
+.availability-day.blank{visibility:hidden}
+.availability-day-panel h3{margin:2px 0 6px;text-transform:capitalize}
+.availability-slots{display:grid;gap:6px}
+.availability-slot{min-height:38px;display:flex;align-items:center;gap:12px;padding:8px 12px;border:1px solid #d9d9d9;border-radius:8px;background:#fff}
+.availability-slot time{font-variant-numeric:tabular-nums;font-weight:700;min-width:52px}
+.availability-slot.free{background:#fff;border-color:#d8d8d8}
+.availability-slot.busy{background:#ffe1df;border-color:#d9443d;color:#8d211d}
+.availability-slot.busy span{font-weight:700}
+.availability-slot.pending{background:#f6f3ee;color:#766b5d}
+@media(max-width:700px){.availability-layout{grid-template-columns:1fr}.availability-calendar,.availability-day-panel{padding:12px}.availability-day{min-height:38px}}
+</style></head>
 <body><p id="preview-note" hidden class="preview-note">Vista previa: el saludo y el clima muestran datos ilustrativos.</p><header><div class="site-header-layout">
 <section class="header-card weather-card" aria-labelledby="weather-title">
 <div class="weather-title" id="weather-title">CLIMA DE TU ZONA</div>
@@ -69,7 +91,23 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 </section>
 <section id="turnos" class="card"><h2>Solicitá tu turno</h2><p id="booking-notice" class="notice">Reservas en preparación. La conexión con la agenda todavía no está habilitada.</p>
 <form id="booking" method="post" target="_blank" rel="noopener"><p id="booking-customer">Primero ingresá o creá tu ficha en <a href="#clientes">Clientes</a>.</p><input type="hidden" id="nombre" name="nombre"><input type="hidden" id="telefono" name="telefono"><input type="hidden" id="clienteUid" name="clienteUid"><input type="hidden" id="clienteEmail" name="email"><label for="servicio">Tratamiento deseado</label><select id="servicio" name="servicio" required><option value="" selected disabled>Elegí un tratamiento</option><option value="Manicuría + semipermanente">Manicuría + semipermanente · $32.000</option><option value="Manicuría + capping gel">Manicuría + capping gel · $35.000</option><option value="Manicuría + capping Acrygel">Manicuría + capping Acrygel · $40.000</option><option value="Manicuría básica sin esmaltado">Manicuría básica sin esmaltado · $25.000</option><option value="Esculpidas Acrygel cortas + semipermanente (sin decoraciones)">Esculpidas Acrygel cortas + semipermanente (sin decoraciones) · Desde $45.000</option><option value="Esculpidas largas + semipermanente (sin decoraciones)">Esculpidas largas + semipermanente (sin decoraciones) · Desde $50.000</option><option value="Servicio de esculpidas cortas (reparación/reemplazo de 1 uña en total)">Servicio de esculpidas cortas (reparación/reemplazo de 1 uña en total) · Desde $45.000</option><option value="Servicio de esculpidas largas (reparación/reemplazo de 1 uña en total)">Servicio de esculpidas largas (reparación/reemplazo de 1 uña en total) · Desde $50.000</option><option value="Pedicuría sin semipermanente">Pedicuría sin semipermanente · $35.000 (duración a confirmar)</option><option value="Pedicuría + semipermanente">Pedicuría + semipermanente · Desde $40.000 (duración a confirmar)</option><option value="Limpieza / higiene facial">Limpieza / higiene facial · $60.000 (duración a confirmar)</option><option value="Maquillaje social">Maquillaje social · Desde $80.000 (duración a confirmar)</option><option value="Lifting de pestañas">Lifting de pestañas · $25.000</option><option value="Lifting + tinte">Lifting + tinte · $30.000</option><option value="Alisado corto (debajo de las orejas)">Alisado corto (debajo de las orejas) · $25.000</option><option value="Alisado medio (hasta los hombros)">Alisado medio (hasta los hombros) · $35.000</option><option value="Alisado largo (desde los hombros en adelante)">Alisado largo (desde los hombros en adelante) · $55.000</option></select><label for="fecha">Fecha preferida</label><input id="fecha" name="fecha" type="date" required><label for="hora">Horario preferido</label><input id="hora" name="hora" type="time" required><input type="hidden" id="requestId" name="requestId"><div hidden aria-hidden="true"><label>Sitio web<input name="website" tabindex="-1" autocomplete="off"></label></div><button type="submit" disabled>Solicitar reserva</button><noscript>Activá JavaScript para solicitar un turno.</noscript></form><p id="resultado" role="status"></p></section>
-<section id="calendario" class="card" aria-labelledby="calendar-title"><h2 id="calendar-title">Disponibilidad de turnos</h2><p class="muted">Consultá el mes completo y tocá una fecha para abrir la agenda de ese día. La vista pública muestra horarios ocupados y disponibles, sin datos personales.</p><details open><summary style="cursor:pointer;padding:12px 0">Ver calendario mensual</summary><div style="overflow-x:auto;margin-top:12px"><iframe title="Disponibilidad de turnos Oasis Beauty Center" src="https://calendar.google.com/calendar/embed?src=04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq%40group.calendar.google.com&amp;ctz=America%2FArgentina%2FBuenos_Aires&amp;hl=es&amp;mode=MONTH&amp;showPrint=0&amp;showCalendars=0" loading="lazy" style="border:0;width:100%;min-width:500px;height:600px" referrerpolicy="strict-origin-when-cross-origin"></iframe></div><p><a class="btn" href="https://calendar.google.com/calendar/embed?src=04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq%40group.calendar.google.com&amp;ctz=America%2FArgentina%2FBuenos_Aires&amp;hl=es&amp;mode=MONTH&amp;showPrint=0&amp;showCalendars=0" target="_blank" rel="noopener noreferrer">Abrir calendario completo</a></p><p class="muted"><small>La agenda permite consultar la disponibilidad; la solicitud del turno no queda confirmada solo por verla. Los horarios de atención del centro son de 9:00 a 21:00.</small></p></details></section>
+<section id="calendario" class="card" aria-labelledby="calendar-title">
+<h2 id="calendar-title">Disponibilidad de turnos</h2>
+<p class="muted">Elegí un día para consultar la agenda por hora. El centro atiende de 09:00 a 21:00. Los turnos ocupados se muestran en rojo; los disponibles quedan en blanco.</p>
+<div class="availability-layout">
+<div class="availability-calendar" aria-label="Calendario mensual">
+<div class="availability-monthbar"><button id="availability-prev" type="button" class="secondary" aria-label="Mes anterior">‹</button><h3 id="availability-month"></h3><button id="availability-next" type="button" class="secondary" aria-label="Mes siguiente">›</button></div>
+<div class="availability-grid availability-weekdays" aria-hidden="true"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+<div id="availability-grid" class="availability-grid" role="group" aria-label="Días del mes"></div>
+</div>
+<div class="availability-day-panel">
+<h3 id="availability-selected-day"></h3>
+<p id="availability-status" class="muted" role="status" aria-live="polite"></p>
+<div id="availability-slots" class="availability-slots" aria-label="Horarios de atención"></div>
+</div>
+</div>
+<p class="muted"><small>La página consulta solo los horarios ocupados; no muestra nombres ni detalles personales de las reservas.</small></p>
+</section>
 <section id="administracion" class="card" aria-labelledby="admin-title">
 <h2 id="admin-title">Administración de Oasis</h2>
 <p class="muted">Ingreso exclusivo para la cuenta administradora.</p>
@@ -79,7 +117,7 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 </section>
 <section id="estadisticas" class="card" aria-labelledby="stats-title" hidden><div class="stats-head"><h2 id="stats-title">Estadísticas del centro</h2><span class="pill">Vista preliminar · sin datos</span></div><p class="muted">Panel preparado para administración. Los indicadores se actualizarán cuando se conecte el sistema de reservas y pagos.</p><div class="stats-grid"><div class="stat"><span>Turnos de hoy</span><strong>—</strong></div><div class="stat"><span>Turnos del mes</span><strong>—</strong></div><div class="stat"><span>Ingresos confirmados</span><strong>—</strong></div><div class="stat"><span>Señas pendientes</span><strong>—</strong></div></div><p class="muted"><small>Sin conexión a base de datos. Este recuadro es una maqueta visible; se restringirá a administradores al implementar el inicio de sesión.</small></p></section>
 <section class="card"><h2>Contacto</h2><p>Próximamente: WhatsApp Business, dirección y redes sociales oficiales.</p></section></main><footer><small>© <span id="year"></span> Oasis Beauty Center · Sitio en preparación · <a href="#administracion">Acceso administrador</a></small></footer>
-<script type="module" src="./booking.js"></script>
+<script type="module" src="./booking.js"></script><script type="module" src="./availability.js"></script>
 <script type="module" src="customer-bootstrap.js"></script>
 <script type="module" src="./header-widgets.js"></script>
 <script type="module" src="./admin.js"></script></body></html>
