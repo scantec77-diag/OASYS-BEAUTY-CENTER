@@ -109,6 +109,12 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 .availability-color-palette{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
 .availability-color-palette label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:8px 10px;background:#fff;border:1px solid #eadfcf;border-radius:9px}
 .availability-color-palette input[type=color]{width:44px;height:36px;padding:2px}
+
+.availability-edit-button{min-width:150px}
+.availability-hours-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.availability-second-toggle{grid-column:1/-1;display:flex;align-items:center;gap:8px;margin:12px 0}
+.availability-second-toggle input{width:auto;margin:0}
+@media(max-width:520px){.availability-hours-grid{grid-template-columns:1fr}}
 </style></head>
 <body><p id="preview-note" hidden class="preview-note">Vista previa: el saludo y el clima muestran datos ilustrativos.</p><header><div class="site-header-layout">
 <section class="header-card weather-card" aria-labelledby="weather-title">
@@ -172,7 +178,7 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 </section>
 <section id="administracion" class="card" aria-labelledby="admin-title">
 <h2 id="admin-title">Administración de Oasis</h2>
-<p class="muted">Ingreso exclusivo para la cuenta administradora.</p><div class="admin-tools"><button id="admin-services-button" type="button" class="secondary" hidden>Servicios</button><button id="availability-edit-button" type="button" class="availability-edit-button" title="Editar días y horarios de turnos" aria-label="Editar días y horarios de turnos" hidden>🗓️✎</button></div>
+<p class="muted">Ingreso exclusivo para la cuenta administradora.</p><div class="admin-tools"><button id="admin-services-button" type="button" class="secondary" hidden>Servicios</button><button id="availability-edit-button" type="button" class="availability-edit-button" title="Editar días y horarios de turnos" aria-label="Editar días y horarios de turnos" hidden>🗓️ Editar turnos</button></div>
 <section id="availability-editor" class="availability-editor" hidden aria-labelledby="availability-editor-title">
 <h3 id="availability-editor-title">Editar días y horarios</h3>
 <p class="muted">Elegí los días de atención y el horario de apertura y cierre.</p>
@@ -181,15 +187,22 @@ header{padding:16px;background:#fff;border-bottom:1px solid #eadfcf}
 <label><input type="checkbox" name="days" value="1"> Lun</label><label><input type="checkbox" name="days" value="2"> Mar</label><label><input type="checkbox" name="days" value="3"> Mié</label><label><input type="checkbox" name="days" value="4"> Jue</label><label><input type="checkbox" name="days" value="5"> Vie</label><label><input type="checkbox" name="days" value="6"> Sáb</label><label><input type="checkbox" name="days" value="7"> Dom</label>
 </div>
 
-<label for="availability-open-time">Abre</label><input id="availability-open-time" name="openTime" type="time" min="00:00" max="23:30" step="1800" required>
-<label for="availability-close-time">Cierra</label><input id="availability-close-time" name="closeTime" type="time" min="00:30" max="23:59" step="1800" required>
+<div class="availability-hours-grid">
+<label for="availability-open-time">Primer tramo · abre<input id="availability-open-time" name="openTime" type="time" min="00:00" max="23:30" step="1800" required></label>
+<label for="availability-close-time">Primer tramo · cierra<input id="availability-close-time" name="closeTime" type="time" min="00:30" max="23:59" step="1800" required></label>
+</div>
+<label class="availability-second-toggle"><input id="availability-second-shift-enabled" type="checkbox"> Agregar otro tramo después del descanso</label>
+<div id="availability-second-shift-fields" class="availability-hours-grid" hidden>
+<label for="availability-open-time-2">Segundo tramo · reabre<input id="availability-open-time-2" name="secondOpenTime" type="time" min="00:00" max="23:30" step="1800"></label>
+<label for="availability-close-time-2">Segundo tramo · cierra<input id="availability-close-time-2" name="secondCloseTime" type="time" min="00:30" max="23:59" step="1800"></label>
+</div>
 <div class="availability-color-palette" role="group" aria-label="Colores de estados">
 <label for="availability-color-unavailable">No disponible<input id="availability-color-unavailable" type="color" value="#E5E7EB"></label>
 <label for="availability-color-available">Disponible<input id="availability-color-available" type="color" value="#FFFFFF"></label>
 <label for="availability-color-busy">Ocupado<input id="availability-color-busy" type="color" value="#FECACA"></label>
 <label for="availability-color-taken">Turno tomado<input id="availability-color-taken" type="color" value="#BFDBFE"></label>
 </div>
-<button id="availability-settings-save" type="submit" disabled>Guardar horario</button>
+<button id="availability-settings-save" type="submit" disabled>Guardar días, horarios y colores</button>
 <p id="availability-settings-status" class="muted" role="status" aria-live="polite"></p>
 </form>
 </section>
