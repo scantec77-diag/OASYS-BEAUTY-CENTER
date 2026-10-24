@@ -3,6 +3,12 @@ const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const FIREBASE_WEB_API_KEY = 'AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po';
 const ADMIN_EMAILS = ['oasysbeautycenter@gmail.com'];
 const SETTINGS_KEY = 'OASIS_WEEKLY_SCHEDULE';
+const DEFAULT_STATUS_COLORS = {
+  unavailable: '#E5E7EB',
+  available: '#FFFFFF',
+  busy: '#FECACA',
+  taken: '#BFDBFE'
+};
 
 function doGet(e) {
   const callback = String(e.parameter.callback || '');
@@ -29,7 +35,8 @@ function doGet(e) {
     if (!calendar) return jsonp(callback, { ok: false, error: 'calendar_unavailable' });
     const busy = calendar.getEvents(dayStart, dayEnd).map(event => ({
       start: event.getStartTime().toISOString(),
-      end: event.getEndTime().toISOString()
+      end: event.getEndTime().toISOString(),
+      status: getEventStatus_(event.getTitle())
     }));
     return jsonp(callback, { ok: true, date, closed: false, schedule, busy });
   } catch (error) {
@@ -59,13 +66,16 @@ function doPost(e) {
   const days = String(params.days || '').split(',').filter(Boolean).map(Number);
   const openTime = String(params.openTime || '');
   const closeTime = String(params.closeTime || '');
+  let statusColors;
+  try { statusColors = JSON.parse(String(params.statusColors || '{}')); } catch (error) { statusColors = null; }
   if (days.some(day => !Number.isInteger(day) || day < 1 || day > 7) ||
       !/^([01]\d|2[0-3]):(00|30)$/.test(openTime) ||
       !/^([01]\d|2[0-3]):(00|30)$/.test(closeTime) ||
-      timeMinutes_(closeTime) <= timeMinutes_(openTime)) {
+      timeMinutes_(closeTime) <= timeMinutes_(openTime) ||
+      !validStatusColors_(statusColors)) {
     return postResult_(false, 'Revisá los días y el horario elegido.', 'oasis-schedule-save');
   }
-  const schedule = { days: Array.from(new Set(days)).sort((a,b) => a-b), openTime, closeTime, updatedAt: new Date().toISOString() };
+  const schedule = { days: Array.from(new Set(days)).sort((a,b) => a-b), openTime, closeTime, statusColors, updatedAt: new Date().toISOString() };
   PropertiesService.getScriptProperties().setProperty(SETTINGS_KEY, JSON.stringify(schedule));
   return postResult_(true, 'Horario guardado.', 'oasis-schedule-save');
 }
@@ -92,10 +102,25 @@ function getSchedule_() {
   if (stored) {
     try {
       const value = JSON.parse(stored);
-      if (Array.isArray(value.days) && value.openTime && value.closeTime) return value;
+      if (Array.isArray(value.days) && value.openTime && value.closeTime) {
+        value.statusColors = { ...DEFAULT_STATUS_COLORS, ...(value.statusColors || {}) };
+        return value;
+      }
     } catch (error) {}
   }
-  return { days: [], openTime: '09:00', closeTime: '21:00' };
+  return { days: [], openTime: '09:00', closeTime: '21:00', statusColors: { ...DEFAULT_STATUS_COLORS } };
+}
+
+function validStatusColors_(colors) {
+  const keys = ['unavailable', 'available', 'busy', 'taken'];
+  return colors && keys.every(key => typeof colors[key] === 'string' && /^#[0-9A-Fa-f]{6}$/.test(colors[key]));
+}
+
+function getEventStatus_(title) {
+  const value = String(title || '').trim().toLowerCase();
+  if (/^(turno tomado|turno:|reserva oasis)/.test(value)) return 'taken';
+  if (/^(no disponible|cerrado)/.test(value)) return 'unavailable';
+  return 'busy';
 }
 
 function getServices_() {
