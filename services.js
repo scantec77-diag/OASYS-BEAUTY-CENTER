@@ -311,4 +311,6 @@ window.addEventListener('message', event => {
 
 document.addEventListener('oasis:admin-auth', event => syncAdmin(event.detail));
 if (adminSession) syncAdmin(adminSession);
+applyStyles(styles);
+if (adminSession) syncAdmin(adminSession);
 if (validEndpoint) refreshServices();
