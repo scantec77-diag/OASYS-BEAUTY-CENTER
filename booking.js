@@ -10,7 +10,18 @@ const dateParts = new Intl.DateTimeFormat('en-CA', {
 const part = type => dateParts.find(p => p.type === type).value;
 document.getElementById('fecha').min = part('year') + '-' + part('month') + '-' + part('day');
 const enabled = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(BOOKING_ENDPOINT);
-submit.disabled = !enabled;
+let customer = null;
+submit.disabled = true;
+document.addEventListener('oasis:customer', event => {
+  customer = event.detail;
+  requestId = '';
+  document.getElementById('nombre').value = customer?.nombre || '';
+  document.getElementById('telefono').value = customer?.telefono || '';
+  document.getElementById('clienteUid').value = customer?.uid || '';
+  document.getElementById('clienteEmail').value = customer?.email || '';
+  document.getElementById('booking-customer').textContent = customer ? 'Reserva para ' + customer.nombre : 'Primero ingresá o creá tu ficha en la sección Clientes.';
+  submit.disabled = !enabled || !customer;
+});
 if (enabled) {
   booking.action = BOOKING_ENDPOINT;
   document.getElementById('booking-notice').textContent =
@@ -21,7 +32,7 @@ if (enabled) {
 let requestId = '';
 booking.addEventListener('input', () => { requestId = ''; });
 booking.addEventListener('submit', event => {
-  if (!enabled) { event.preventDefault(); return; }
+  if (!enabled || !customer) { event.preventDefault(); return; }
   const name = document.getElementById('nombre');
   const service = document.getElementById('servicio');
   name.value = name.value.trim();
@@ -31,3 +42,4 @@ booking.addEventListener('submit', event => {
   document.getElementById('requestId').value = requestId;
   result.textContent = 'Consultá el resultado en la pestaña que se abre. Este mensaje no confirma la reserva. Si falla, reenviá sin modificar los datos.';
 });
+
