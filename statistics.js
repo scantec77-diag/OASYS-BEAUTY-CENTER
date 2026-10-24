@@ -110,7 +110,7 @@ depositForm?.addEventListener('submit', async event => {
   event.preventDefault();
   if (!depositForm.reportValidity()) return;
   const reference = depositReference.value.trim();
-  const client = depositClient.value.trim().replace(/\\s+/g, ' ');
+  const client = depositClient.value.trim().replace(/\s+/g, ' ');
   const amount = Number(depositAmount.value);
   const user = window.oasisAdminServices?.auth?.currentUser;
   const email = String(user?.email || '').trim().toLowerCase();
