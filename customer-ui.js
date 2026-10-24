@@ -3,18 +3,42 @@ export function mountCustomers(api) {
   const el = id => document.getElementById(id);
   let user = null, profile = null, generation = 0, busy = false;
   let mode = 'existing';
+  let legacyVerified = false;
   let link = api.isEmailLink(location.href) ? location.href : null;
   const message = text => { el('customer-status').textContent = text; };
   const storage = {
     get() { try { return localStorage.getItem('oasis.pendingEmail') || ''; } catch { return ''; } },
-    set(email) { try { localStorage.setItem('oasis.pendingEmail', email); } catch {} },
-    clear() { try { localStorage.removeItem('oasis.pendingEmail'); } catch {} }
+    getMode() { try { return localStorage.getItem('oasis.pendingMode') || ''; } catch { return ''; } },
+    set(email, mode) {
+      try {
+        localStorage.setItem('oasis.pendingEmail', email);
+        localStorage.setItem('oasis.pendingMode', mode);
+      } catch {}
+    },
+    clear() {
+      try {
+        localStorage.removeItem('oasis.pendingEmail');
+        localStorage.removeItem('oasis.pendingMode');
+      } catch {}
+    }
   };
+  const requestedMode = new URLSearchParams(location.search).get('customerFlow');
+  mode = requestedMode === 'new' || requestedMode === 'existing'
+    ? requestedMode
+    : (storage.getMode() === 'new' ? 'new' : 'existing');
+  function selectMode(name) {
+    mode = name;
+    el('customer-new').setAttribute('aria-pressed', String(name === 'new'));
+    el('customer-existing').setAttribute('aria-pressed', String(name === 'existing'));
+    el('customer-access-title').textContent = name === 'new' ? 'Creá tu ficha de cliente' : 'Ingresá con tu mail';
+  }
+  selectMode(mode);
   function publish(value) {
     document.dispatchEvent(new CustomEvent('oasis:customer', {detail: value}));
   }
   function resetProfile() {
     profile = null;
+    legacyVerified = false;
     el('customer-profile').hidden = true;
     el('customer-ready').hidden = true;
     el('customer-name').value = '';
@@ -59,10 +83,29 @@ export function mountCustomers(api) {
     try {
       const found = await api.getProfile(next);
       if (current !== generation || user?.uid !== next.uid) return;
-      if (found) { showProfile(found); message('Ya encontramos tu ficha. Podés continuar con tu turno.'); }
-      else {
-        el('customer-profile').hidden = false;
-        message(mode === 'existing' ? 'Todavía no hay una ficha web asociada a este mail. Completá tus datos una sola vez.' : 'Mail verificado. Completá tus datos para darte de alta.');
+      if (found) {
+        showProfile(found);
+        message('Ya encontramos tu ficha. Podés continuar con tu turno.');
+      } else {
+        const legacy = await api.getLegacyProfile(next);
+        if (current !== generation || user?.uid !== next.uid) return;
+        if (legacy) {
+          legacyVerified = true;
+          if (legacy.nombre && legacy.telefono) {
+            showProfile(legacy);
+            message('Encontramos tu ficha anterior y verificamos tu mail. Podés continuar con tu turno.');
+          } else {
+            el('customer-profile').hidden = false;
+            el('customer-name').value = legacy.nombre || '';
+            el('customer-phone').value = legacy.telefono || '';
+            message('Encontramos antecedentes asociados a este mail. Completá los datos que faltan para preparar tu ficha.');
+          }
+        } else if (mode === 'new') {
+          el('customer-profile').hidden = false;
+          message('Mail verificado. Completá tus datos para crear tu ficha.');
+        } else {
+          message('Verificamos tu mail, pero no encontramos una ficha anterior asociada. Revisá que sea el mail que usabas en Oasis o comunicate con el centro para validar tus datos.');
+        }
       }
     } catch (error) {
       if (current !== generation) return;
@@ -70,10 +113,7 @@ export function mountCustomers(api) {
     }
   }
   for (const name of ['new', 'existing']) el('customer-' + name).addEventListener('click', () => {
-    mode = name;
-    el('customer-new').setAttribute('aria-pressed', String(name === 'new'));
-    el('customer-existing').setAttribute('aria-pressed', String(name === 'existing'));
-    el('customer-access-title').textContent = name === 'new' ? 'Creá tu ficha de cliente' : 'Ingresá con tu mail';
+    selectMode(name);
     el('customer-email').focus();
   });
   el('customer-email').value = storage.get();
@@ -91,8 +131,10 @@ export function mountCustomers(api) {
         el('customer-send').textContent = 'Enviarme enlace de acceso';
         await loadUser(credential.user);
       } else {
-        await api.sendLink(email, location.origin + location.pathname);
-        storage.set(email);
+        const continuation = new URL(location.pathname, location.origin);
+        continuation.searchParams.set('customerFlow', mode);
+        await api.sendLink(email, continuation.toString());
+        storage.set(email, mode);
         message('Te enviamos un enlace. Revisá tu correo y la carpeta de spam; abrilo para continuar.');
       }
     } catch (error) {
@@ -105,7 +147,7 @@ export function mountCustomers(api) {
   });
   el('customer-profile').addEventListener('submit', async event => {
     event.preventDefault();
-    if (busy || !user?.emailVerified) return;
+    if (busy || !user?.emailVerified || (mode !== 'new' && !legacyVerified)) return;
     const nombre = el('customer-name').value.trim();
     const telefono = el('customer-phone').value.trim();
     if (!nombre || nombre.length > 80 || !/^[+() 0-9-]{7,25}$/.test(telefono)) {
@@ -124,7 +166,7 @@ export function mountCustomers(api) {
   el('customer-signout').addEventListener('click', async () => {
     // Clear visible PII immediately, even if sign-out cannot reach storage.
     ++generation; resetProfile();
-    try { await api.logout(); storage.clear(); el('customer-email').value = ''; }
+    try { await api.logout(); storage.clear(); el('customer-email').value = ''; selectMode('existing'); }
     catch (error) { message(errorText(error)); el('customer-retry').hidden = false; }
   });
   el('customer-retry').addEventListener('click', () => loadUser(user));
