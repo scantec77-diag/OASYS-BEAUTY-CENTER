@@ -1,3 +1,5 @@
-// Set once to the deployed Google Apps Script URL ending in /exec.
-// The weather provider key stays in Apps Script Properties, never in this file.
+// Booking and weather endpoint (existing flow).
 export const APPS_SCRIPT_ENDPOINT = '';
+
+// Separate web app for public availability and admin schedule settings.
+export const AVAILABILITY_ENDPOINT = '';
