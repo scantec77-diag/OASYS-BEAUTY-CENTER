@@ -150,8 +150,12 @@ function renderDay(busyIntervals = null) {
     const end = Math.min(start + 60, close);
     const startMs = dayStart + start * 60 * 1000;
     const endMs = dayStart + end * 60 * 1000;
-    const isBusy = busyIntervals.some(event => event.start < endMs && event.end > startMs);
-    addSlot(start, end, isBusy ? 'busy' : 'free', isBusy ? 'Ocupado' : 'Disponible');
+    const matching = busyIntervals.filter(event => event.start < endMs && event.end > startMs);
+    const state = matching.some(event => event.status === 'taken') ? 'taken'
+      : matching.some(event => event.status === 'unavailable') ? 'unavailable'
+        : matching.length ? 'busy' : 'free';
+    const labels = { unavailable: 'No disponible', free: 'Disponible', busy: 'Ocupado', taken: 'Turno tomado' };
+    addSlot(start, end, state, labels[state]);
   }
   status.textContent = 'Horario de atención: ' + schedule.openTime + ' a ' + schedule.closeTime + '.';
 }
