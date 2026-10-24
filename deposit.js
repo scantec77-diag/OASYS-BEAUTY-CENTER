@@ -10,8 +10,17 @@ const form = byId('admin-deposit-form');
 const formStatus = byId('admin-deposit-status');
 const save = byId('admin-deposit-save');
 const money = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
-const { doc, getDocFromServer, setDoc, serverTimestamp } =
+const { initializeApp } = await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js');
+const { getFirestore, doc, getDocFromServer, setDoc, serverTimestamp } =
   await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
+const publicDb = getFirestore(initializeApp({
+  apiKey: 'AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po',
+  authDomain: 'oasysbeautycenter.firebaseapp.com',
+  projectId: 'oasysbeautycenter',
+  storageBucket: 'oasysbeautycenter.firebasestorage.app',
+  messagingSenderId: '26340609563',
+  appId: '1:26340609563:web:61aff5ee2cc95ec267b2be'
+}, 'oasys-public-deposits'));
 let adminSession = window.oasisAdminSession || null;
 let settings = null;
 
@@ -42,9 +51,7 @@ function renderPublicSettings(value) {
 
 async function loadPublicSettings() {
   try {
-    const db = window.oasisAdminServices?.db;
-    if (!db) throw new Error('firestore-not-ready');
-    const snapshot = await getDocFromServer(doc(db, 'configuracionPublica', 'senas'));
+    const snapshot = await getDocFromServer(doc(publicDb, 'configuracionPublica', 'senas'));
     renderPublicSettings(snapshot.exists() ? snapshot.data() : null);
   } catch {
     if (status) status.textContent = 'No se pudo cargar el importe de la seña. Consultalo con Oasis.';
@@ -119,7 +126,7 @@ form?.addEventListener('submit', async event => {
   save.disabled = true;
   formStatus.textContent = 'Guardando la seña y los datos de la billetera…';
   try {
-    await setDoc(doc(window.oasisAdminServices.db, 'configuracionPublica', 'senas'), value);
+    await setDoc(doc(window.oasisAdminServices?.db || publicDb, 'configuracionPublica', 'senas'), value);
     renderPublicSettings(value);
     formStatus.textContent = 'Seña guardada. El importe y los datos de pago aparecen en la reserva.';
   } catch (error) {
