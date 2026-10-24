@@ -1,4 +1,6 @@
 import { AVAILABILITY_ENDPOINT } from './app-config.js';
+const { addDoc, collection, getDocsFromServer, query, serverTimestamp, where } =
+  await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
 
 const depositElement = document.getElementById('stats-deposits');
 const manualElement = document.getElementById('stats-manual-income');
@@ -7,10 +9,110 @@ const completedList = document.getElementById('services-completed-list');
 const adminList = document.getElementById('admin-completion-list');
 const adminStatus = document.getElementById('admin-completion-status');
 const frame = document.getElementById('oasis-completed-services-frame');
+const paymentButton = document.getElementById('admin-manual-payment-button');
+const paymentEditor = document.getElementById('admin-manual-payment-editor');
+const paymentForm = document.getElementById('admin-manual-payment-form');
+const paymentAmount = document.getElementById('admin-manual-payment-amount');
+const paymentSave = document.getElementById('admin-manual-payment-save');
+const paymentStatus = document.getElementById('admin-manual-payment-status');
 const money = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
 const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(AVAILABILITY_ENDPOINT);
 let adminSession = window.oasisAdminSession || null;
 let pendingAction = '';
+
+function buenosAiresDayKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const get = type => parts.find(part => part.type === type).value;
+  return get('year') + '-' + get('month') + '-' + get('day');
+}
+
+async function refreshManualIncome() {
+  if (!adminSession?.idToken) return false;
+  const db = window.oasisAdminServices?.db;
+  if (!db) {
+    paymentStatus.textContent = 'No se pudo conectar con Firestore.';
+    return false;
+  }
+  try {
+    const dayKey = buenosAiresDayKey();
+    const dailyPayments = query(
+      collection(db, 'pagosManuales'),
+      where('dayKey', '==', dayKey)
+    );
+    const snapshot = await getDocsFromServer(dailyPayments);
+    const total = snapshot.docs.reduce((sum, item) => {
+      const amount = Number(item.data().monto);
+      return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+    }, 0);
+    manualElement.dataset.value = String(total);
+    manualElement.textContent = '$ ' + money.format(total);
+    paymentStatus.textContent = 'Ingresos manuales de hoy actualizados.';
+    return true;
+  } catch (error) {
+    paymentStatus.textContent = error?.code === 'permission-denied'
+      ? 'Firebase todavía no permite consultar pagos. Publicá las reglas actualizadas de Firestore.'
+      : 'No se pudo actualizar el resumen de pagos manuales.';
+    return false;
+  }
+}
+
+paymentButton.addEventListener('click', () => {
+  paymentEditor.hidden = false;
+  paymentButton.setAttribute('aria-expanded', 'true');
+  paymentEditor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('admin-manual-payment-title').focus({ preventScroll: true });
+  paymentAmount.focus({ preventScroll: true });
+});
+document.getElementById('admin-manual-payment-close').addEventListener('click', () => {
+  paymentEditor.hidden = true;
+  paymentButton.setAttribute('aria-expanded', 'false');
+  paymentButton.focus();
+});
+
+paymentForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!paymentForm.reportValidity()) return;
+  const amount = Number(paymentAmount.value);
+  const user = window.oasisAdminServices?.auth?.currentUser;
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (!adminSession?.idToken || !user?.emailVerified) {
+    paymentStatus.textContent = 'Iniciá sesión con la cuenta administradora de Oasis.';
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100000000) {
+    paymentStatus.textContent = 'Ingresá un importe válido en pesos.';
+    return;
+  }
+  const db = window.oasisAdminServices?.db;
+  if (!db) {
+    paymentStatus.textContent = 'No se pudo conectar con Firestore.';
+    return;
+  }
+  paymentSave.disabled = true;
+  paymentStatus.textContent = 'Guardando pago manual…';
+  try {
+    await addDoc(collection(db, 'pagosManuales'), {
+      monto: amount,
+      dayKey: buenosAiresDayKey(),
+      createdAt: serverTimestamp(),
+      createdBy: email
+    });
+    paymentForm.reset();
+    const refreshed = await refreshManualIncome();
+    paymentStatus.textContent = refreshed
+      ? 'Pago de $ ' + money.format(amount) + ' registrado. Total del día actualizado.'
+      : 'Pago registrado; el resumen del día se actualizará cuando Firestore responda.';
+  } catch (error) {
+    paymentStatus.textContent = error?.code === 'permission-denied'
+      ? 'Firebase rechazó el pago. Publicá las reglas actualizadas de Firestore.'
+      : 'No se pudo guardar el pago manual. Revisá la conexión con Firestore.';
+  } finally {
+    paymentSave.disabled = false;
+  }
+});
 
 function readAmount(element) {
   if (!element) return null;
@@ -23,8 +125,8 @@ function readAmount(element) {
   const cleaned = source.replace(/[^0-9,.-]/g, '');
   if (!cleaned) return null;
   const normalized = cleaned.includes(',')
-    ? cleaned.replace(/\\./g, '').replace(',', '.')
-    : cleaned.replace(/\\./g, '');
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned.replace(/\./g, '');
   const amount = Number(normalized);
   return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
@@ -145,9 +247,16 @@ window.addEventListener('message', event => {
 
 document.addEventListener('oasis:admin-auth', event => {
   adminSession = event.detail || null;
-  if (adminSession?.idToken) refreshAdminAgenda();
+  if (adminSession?.idToken) {
+    refreshAdminAgenda();
+    refreshManualIncome();
+  }
   else {
     adminStatus.textContent = '';
+    paymentEditor.hidden = true;
+    paymentButton.setAttribute('aria-expanded', 'false');
+    manualElement.dataset.value = '';
+    manualElement.textContent = '$ —';
     adminList.replaceChildren();
     renderCompletedCounts({});
   }
@@ -161,5 +270,5 @@ for (const element of [depositElement, manualElement]) {
     characterData: true, subtree: true
   });
 }
-if (adminSession?.idToken) refreshAdminAgenda();
-window.setInterval(refreshAdminAgenda, 30000);
+if (adminSession?.idToken) { refreshAdminAgenda(); refreshManualIncome(); }
+window.setInterval(() => { refreshAdminAgenda(); refreshManualIncome(); }, 30000);
