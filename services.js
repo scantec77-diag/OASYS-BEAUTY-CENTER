@@ -81,11 +81,17 @@ function renderCatalog(items) {
   for (const service of services) {
     const article = document.createElement('article');
     article.className = 'service-item';
+    article.setAttribute('role', 'button');
+    article.setAttribute('tabindex', '0');
+    article.setAttribute('aria-pressed', 'false');
     const name = document.createElement('strong');
     name.textContent = service.name;
     const details = document.createElement('span');
     details.textContent = formatMoney(service.price, service.fromPrice) + ' · ' + formatDuration(service.durationMin);
-    article.append(name, details);
+    const reserveNote = document.createElement('small');
+    reserveNote.className = 'service-reservation-note';
+    reserveNote.textContent = 'La seña y los datos de pago se muestran antes de finalizar.';
+    article.append(name, details, reserveNote);
     catalog.append(article);
 
     const option = document.createElement('option');
