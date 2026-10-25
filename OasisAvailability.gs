@@ -1,4 +1,4 @@
-const CALENDAR_ID = '04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq@group.calendar.google.com';
+const CALENDAR_ID = '04f4ef16777302474a8faeb7e8abafdc32ca2d539c5aebecc22ad66c36814eb3@group.calendar.google.com';
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const FIREBASE_WEB_API_KEY = 'AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po';
 const ADMIN_EMAILS = ['oasysbeautycenter@gmail.com'];
