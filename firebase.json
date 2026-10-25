@@ -1,0 +1,23 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      ".git/**",
+      ".github/**",
+      ".firebase/**",
+      ".codex/**",
+      "**/node_modules/**",
+      "**/.*",
+      "*.md",
+      "**/*.md",
+      "*.gs",
+      "**/*.gs",
+      "calendar-backend/**",
+      "tests/**",
+      "firebase.customers.json",
+      "firestore.customers.rules"
+    ]
+  }
+}
