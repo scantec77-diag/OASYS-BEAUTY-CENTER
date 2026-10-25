@@ -199,6 +199,27 @@ function addSlot(start, end, state, label, showRange = false) {
   const description = document.createElement('span');
   description.textContent = label;
   row.append(time, description);
+  if (state === 'free' && !showRange) {
+    const choose = document.createElement('button');
+    choose.type = 'button';
+    choose.className = 'secondary';
+    choose.textContent = 'Elegir';
+    choose.setAttribute('aria-label', 'Elegir el horario ' + timeLabel(start));
+    choose.addEventListener('click', () => {
+      const dateInput = document.getElementById('fecha');
+      const timeInput = document.getElementById('hora');
+      if (!dateInput || !timeInput) return;
+      dateInput.value = isoDate(selectedDate);
+      timeInput.value = timeLabel(start);
+      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+      timeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const booking = document.getElementById('turnos');
+      status.textContent = 'Elegiste ' + timeLabel(start) + '. Revisá la reserva y enviá la solicitud.';
+      booking?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      timeInput.focus({ preventScroll: true });
+    });
+    row.append(choose);
+  }
   slots.append(row);
 }
 
