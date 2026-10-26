@@ -1,4 +1,4 @@
-const CALENDAR_ID = '04f4ef16777302474a8faeb7e8abafdc32ca2d539c5aebecc22ad66c36814eb3@group.calendar.google.com';
+const CALENDAR_ID = '04f4ef16777302474a8fDcJHrrHSgvFpsYxqb6g97uaQTd2kE31rPUeDZTeDsjVq@group.calendar.google.com';
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 const FIREBASE_WEB_API_KEY = 'AIzaSyBo-OXa4h6wD_3TyKtL3LBulaRDse8z8po';
 const ADMIN_EMAILS = ['oasysbeautycenter@gmail.com'];
@@ -240,7 +240,7 @@ function getSchedule_() {
       }
     } catch (error) {}
   }
-  return { days: [], openTime: '09:00', closeTime: '21:00', secondOpenTime: '', secondCloseTime: '', statusColors: { ...DEFAULT_STATUS_COLORS } };
+  return { days: [1, 2, 3, 4, 5, 6, 7], openTime: '09:00', closeTime: '13:00', secondOpenTime: '14:00', secondCloseTime: '18:00', statusColors: { ...DEFAULT_STATUS_COLORS } };
 }
 
 function validStatusColors_(colors) {
