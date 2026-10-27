@@ -1,4 +1,5 @@
 import { ADMIN_EMAILS } from './admin-config.js';
+import { APPS_SCRIPT_ENDPOINT, WEB_PUSH_VAPID_KEY } from './app-config.js';
 
 const byId = id => document.getElementById(id);
 const status = byId('admin-auth-status');
@@ -66,6 +67,110 @@ if (!normalizedAdmins.length) {
     appId: '1:26340609563:web:61aff5ee2cc95ec267b2be'
   }, 'oasys-admin');
   const auth = getAuth(app);
+  const { getMessaging, getToken, onMessage, isSupported } =
+    await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-messaging.js');
+  const pushButton = document.createElement('button');
+  pushButton.id = 'admin-push-enable';
+  pushButton.type = 'button';
+  pushButton.className = 'secondary';
+  pushButton.textContent = 'Activar avisos de reservas en este celular';
+  const pushStatus = document.createElement('p');
+  pushStatus.className = 'muted';
+  pushStatus.setAttribute('role', 'status');
+  pushStatus.setAttribute('aria-live', 'polite');
+  session.append(pushButton, pushStatus);
+
+  async function registerPushToken(token, idToken) {
+    const frameName = 'oasis-push-registration-' + crypto.randomUUID();
+    const frame = document.createElement('iframe');
+    frame.name = frameName;
+    frame.hidden = true;
+    frame.title = 'Registro de notificaciones';
+    document.body.append(frame);
+    const nonce = crypto.randomUUID();
+    const result = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => finish(new Error('timeout')), 25000);
+      const finish = value => {
+        clearTimeout(timeout);
+        window.removeEventListener('message', onMessageResult);
+        frame.remove();
+        value instanceof Error ? reject(value) : resolve(value);
+      };
+      const onMessageResult = event => {
+        if (event.source !== frame.contentWindow || event.data?.source !== 'oasys-calendar' || event.data?.nonce !== nonce) return;
+        finish(event.data.result);
+      };
+      window.addEventListener('message', onMessageResult);
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = APPS_SCRIPT_ENDPOINT;
+      form.target = frameName;
+      form.hidden = true;
+      for (const [name, value] of Object.entries({
+        action: 'registerAdminPushToken',
+        registrationToken: token,
+        idToken,
+        nonce
+      })) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.append(input);
+      }
+      document.body.append(form);
+      form.submit();
+      form.remove();
+    });
+    if (!result?.ok) throw new Error('registration_failed');
+  }
+
+  let messaging;
+  if (await isSupported()) {
+    messaging = getMessaging(app);
+    onMessage(messaging, payload => {
+      const notification = payload.notification;
+      if (notification && Notification.permission === 'granted') {
+        new Notification(notification.title || 'Nueva reserva pendiente', {
+          body: notification.body || 'Entró una reserva en Oasis Beauty Center.',
+          icon: './oasys-logo.jpg',
+          tag: 'oasys-new-booking'
+        });
+      }
+    });
+  }
+  pushButton.addEventListener('click', async () => {
+    const currentUser = auth.currentUser;
+    const currentEmail = String(currentUser?.email || '').trim().toLowerCase();
+    if (!currentUser || !currentUser.emailVerified || !normalizedAdmins.includes(currentEmail)) {
+      pushStatus.textContent = 'Iniciá sesión con el Gmail administrador para activar los avisos.';
+      return;
+    }
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !messaging || !WEB_PUSH_VAPID_KEY) {
+      pushStatus.textContent = 'Este navegador no admite las notificaciones web necesarias.';
+      return;
+    }
+    pushButton.disabled = true;
+    pushStatus.textContent = 'Preparando las notificaciones…';
+    try {
+      const permission = Notification.permission === 'default'
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      if (permission !== 'granted') throw new Error('permission_denied');
+      const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
+      const token = await getToken(messaging, { vapidKey: WEB_PUSH_VAPID_KEY, serviceWorkerRegistration: registration });
+      if (!token) throw new Error('token_unavailable');
+      await registerPushToken(token, await currentUser.getIdToken(true));
+      pushButton.textContent = 'Avisos de reservas activados en este celular';
+      pushStatus.textContent = 'Listo. Este celular recibirá avisos cuando entre una reserva pendiente.';
+    } catch (error) {
+      pushStatus.textContent = error?.message === 'permission_denied'
+        ? 'El permiso quedó bloqueado. Habilitá las notificaciones del sitio desde la configuración del navegador.'
+        : 'No se pudo activar el celular. Revisá el permiso de notificaciones y volvé a intentar.';
+    } finally {
+      pushButton.disabled = false;
+    }
+  });
   const { getFirestore, doc, getDocFromServer, setDoc, serverTimestamp } =
     await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
   const db = getFirestore(app);
