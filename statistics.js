@@ -27,6 +27,7 @@ const money = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
 const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(AVAILABILITY_ENDPOINT);
 let adminSession = window.oasisAdminSession || null;
 let pendingAction = '';
+let pendingNonce = '';
 
 function buenosAiresDayKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -137,20 +138,31 @@ depositForm?.addEventListener('submit', async event => {
     const depositRef = doc(db, 'senasRecibidas', reference);
     const existing = await getDocFromServer(depositRef);
     if (existing.exists()) {
-      depositStatus.textContent = 'Esa reserva ya tiene una seña registrada. No se duplicó el ingreso.';
+      const saved = existing.data();
+      if (String(saved.cliente || '').trim().toLocaleLowerCase('es-AR') !== client.toLocaleLowerCase('es-AR') ||
+          Number(saved.monto) !== amount) {
+        depositStatus.textContent = 'Esa referencia ya tiene una seña con otros datos. Revisá la reserva antes de continuar.';
+        return;
+      }
+    } else {
+      await setDoc(depositRef, {
+        referencia: reference,
+        cliente: client,
+        monto: amount,
+        dayKey: buenosAiresDayKey(),
+        createdAt: serverTimestamp(),
+        createdBy: email
+      });
+      await refreshDeposits();
+    }
+    const nonce = crypto.randomUUID();
+    if (!sendAdminAction('portalConfirmReceipt', {
+      requestId: reference, customerName: client, amount, nonce
+    })) {
+      depositStatus.textContent = 'La seña quedó guardada, pero no se pudo enviar la confirmación al Calendar. Volvé a intentar con los mismos datos.';
       return;
     }
-    await setDoc(depositRef, {
-      referencia: reference,
-      cliente: client,
-      monto: amount,
-      dayKey: buenosAiresDayKey(),
-      createdAt: serverTimestamp(),
-      createdBy: email
-    });
-    depositForm.reset();
-    await refreshDeposits();
-    depositStatus.textContent = 'Seña de $ ' + money.format(amount) + ' vinculada a la reserva ' + reference + '. Total actualizado.';
+    depositStatus.textContent = 'Seña guardada. Actualizando el turno en Calendar…';
   } catch (error) {
     depositStatus.textContent = error?.code === 'permission-denied'
       ? 'Firebase rechazó el registro. Publicá las reglas actualizadas de Firestore.'
@@ -299,12 +311,15 @@ function renderAdminAppointments(appointments) {
 }
 
 function sendAdminAction(action, extra = {}) {
-  if (pendingAction || !validEndpoint || !adminSession?.idToken) return;
+  if (pendingAction || !validEndpoint || !adminSession?.idToken) return false;
   pendingAction = action;
+  pendingNonce = String(extra.nonce || '');
   window.setTimeout(() => {
     if (pendingAction === action) {
       pendingAction = '';
-      adminStatus.textContent = 'La agenda tardó en responder. Tocá para volver a consultar en unos segundos.';
+      pendingNonce = '';
+      if (action === 'portalConfirmReceipt') depositStatus.textContent = 'Calendar tardó en responder. Volvé a intentar con la misma referencia y el mismo importe.';
+      else adminStatus.textContent = 'La agenda tardó en responder. Tocá para volver a consultar en unos segundos.';
     }
   }, 20000);
   const form = document.createElement('form');
@@ -323,6 +338,7 @@ function sendAdminAction(action, extra = {}) {
   document.body.append(form);
   form.submit();
   form.remove();
+  return true;
 }
 
 function refreshAdminAgenda() {
@@ -336,9 +352,29 @@ function refreshAdminAgenda() {
 }
 
 window.addEventListener('message', event => {
-  if (event.source !== frame.contentWindow || event.data?.type !== 'oasis-service-agenda') return;
+  if (event.source !== frame.contentWindow) return;
+  if (event.data?.source === 'oasys-calendar') {
+    if (!pendingNonce || event.data.nonce !== pendingNonce) return;
+    const action = pendingAction;
+    const result = event.data.result || {};
+    pendingAction = '';
+    pendingNonce = '';
+    if (action === 'portalConfirmReceipt') {
+      if (result.ok) {
+        depositStatus.textContent = 'Comprobante confirmado. El turno quedó verde en Calendar.';
+        depositForm.reset();
+        refreshDeposits();
+      } else {
+        depositStatus.textContent = 'La seña quedó guardada, pero Calendar no pudo confirmar el turno (' +
+          String(result.error || 'error') + '). Corregí el dato si hace falta y volvé a intentar.';
+      }
+    }
+    return;
+  }
+  if (event.data?.type !== 'oasis-service-agenda') return;
   const wasMarking = pendingAction === 'markServiceDone';
   pendingAction = '';
+  pendingNonce = '';
   adminStatus.textContent = event.data.message || (event.data.ok ? 'Agenda actualizada.' : 'No se pudo actualizar la agenda.');
   if (!event.data.ok) return;
   renderCompletedCounts(event.data.data?.counts || {});
