@@ -1,4 +1,5 @@
 import { ADMIN_EMAILS } from './admin-config.js';
+import { APPS_SCRIPT_ENDPOINT, WEB_PUSH_VAPID_KEY } from './app-config.js';
 
 const byId = id => document.getElementById(id);
 const status = byId('admin-auth-status');
@@ -108,6 +109,96 @@ if (!normalizedAdmins.length) {
       clientsSave.disabled = false;
     }
   });
+  const pushButton = document.createElement('button');
+  pushButton.type = 'button';
+  pushButton.className = 'secondary';
+  pushButton.textContent = 'Activar avisos de reservas en este celular';
+  pushButton.hidden = true;
+  const pushStatus = document.createElement('p');
+  pushStatus.className = 'muted';
+  pushStatus.setAttribute('role', 'status');
+  pushStatus.setAttribute('aria-live', 'polite');
+  pushStatus.hidden = true;
+  session.append(pushButton, pushStatus);
+
+  async function saveAdminPushToken(idToken, registrationToken) {
+    const frame = document.createElement('iframe');
+    const nonce = crypto.randomUUID();
+    const frameName = 'oasys-push-register-' + nonce;
+    frame.name = frameName;
+    frame.hidden = true;
+    document.body.append(frame);
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = APPS_SCRIPT_ENDPOINT;
+    form.target = frameName;
+    form.hidden = true;
+    for (const [name, value] of Object.entries({
+      action: 'registerAdminPushToken', idToken, registrationToken, nonce
+    })) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.append(input);
+    }
+    document.body.append(form);
+    try {
+      return await new Promise((resolve, reject) => {
+        const finish = (error, result) => {
+          clearTimeout(timer);
+          window.removeEventListener('message', onMessage);
+          error ? reject(error) : resolve(result);
+        };
+        const onMessage = event => {
+          if (event.source !== frame.contentWindow || event.data?.source !== 'oasys-calendar' || event.data?.nonce !== nonce) return;
+          finish(null, event.data.result);
+        };
+        const timer = setTimeout(() => finish(new Error('El servidor tardó en responder.')), 20000);
+        window.addEventListener('message', onMessage);
+        form.submit();
+      });
+    } finally {
+      form.remove();
+      frame.remove();
+    }
+  }
+
+  pushButton.addEventListener('click', async () => {
+    const user = auth.currentUser;
+    if (!user || !normalizedAdmins.includes(String(user.email || '').trim().toLowerCase())) {
+      pushStatus.textContent = 'Volvé a iniciar sesión con el Gmail administrador de Oasis.';
+      return;
+    }
+    pushButton.disabled = true;
+    pushStatus.textContent = 'Preparando las notificaciones…';
+    try {
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+        throw new Error('Este navegador no permite notificaciones web. Probá desde Chrome en el celular.');
+      }
+      const { isSupported, getMessaging, getToken } =
+        await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-messaging.js');
+      if (!(await isSupported())) throw new Error('Las notificaciones push no son compatibles con este navegador.');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('No se habilitó el permiso de notificaciones en el celular.');
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      const messaging = getMessaging(app);
+      const registrationToken = await getToken(messaging, {
+        vapidKey: WEB_PUSH_VAPID_KEY,
+        serviceWorkerRegistration: registration
+      });
+      if (!registrationToken) throw new Error('Firebase no devolvió el registro de este celular.');
+      const result = await saveAdminPushToken(await user.getIdToken(), registrationToken);
+      if (!result?.ok) throw new Error('No se pudo guardar el registro de notificaciones.');
+      pushStatus.textContent = 'Listo: este celular recibirá un aviso cuando entre una reserva pendiente de pago.';
+      pushButton.textContent = 'Notificaciones de reservas activadas';
+    } catch (error) {
+      pushStatus.textContent = error?.message || 'No se pudieron activar las notificaciones. Volvé a intentar.';
+    } finally {
+      pushButton.disabled = false;
+    }
+  });
+
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -161,6 +252,9 @@ if (!normalizedAdmins.length) {
     stats.hidden = false;
     status.textContent = 'Acceso de administrador habilitado.';
     publishAdminAuth({ email: user.email, idToken: null });
+    pushButton.hidden = false;
+    pushStatus.hidden = false;
+    pushStatus.textContent = 'Activá los avisos una vez en este celular para recibir nuevas reservas.';
     try {
       const idToken = await user.getIdToken();
       publishAdminAuth({ email: user.email, idToken });
