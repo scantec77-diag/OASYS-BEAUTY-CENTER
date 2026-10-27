@@ -1,5 +1,6 @@
 import { ADMIN_EMAILS } from './admin-config.js';
-import { APPS_SCRIPT_ENDPOINT, WEB_PUSH_VAPID_KEY } from './app-config.js';
+import { APPS_SCRIPT_ENDPOINT } from './app-config.js';
+import { WEB_PUSH_VAPID_KEY } from './push-config.js';
 
 const byId = id => document.getElementById(id);
 const status = byId('admin-auth-status');
