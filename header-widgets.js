@@ -4,6 +4,9 @@ const byId = id => document.getElementById(id);
 const weatherButton = byId('weather-button');
 const weatherStatus = byId('weather-status');
 const weatherResult = byId('weather-result');
+const weatherIds = ['weather-button', 'weather-status', 'weather-result', 'weather-icon',
+  'weather-temperature', 'weather-condition', 'weather-location', 'weather-details', 'weather-updated'];
+const weatherReady = weatherIds.every(id => byId(id));
 let pending = false;
 
 function setStatus(text) {
@@ -80,7 +83,7 @@ function loadWeather(latitude, longitude) {
   document.head.append(script);
 }
 
-weatherButton.addEventListener('click', () => {
+if (weatherReady) weatherButton.addEventListener('click', () => {
   if (pending) return;
   if (!APPS_SCRIPT_ENDPOINT) {
     setStatus('El clima local está preparado y se activará cuando conectemos el servicio de Oasis.');
@@ -109,7 +112,8 @@ weatherButton.addEventListener('click', () => {
 
 
 // A shareable visual preview uses sample values only; it never requests location.
-if (new URLSearchParams(location.search).get('vista') === 'demo') {
+if (weatherReady && ['preview-note', 'welcome-greeting', 'welcome-card'].every(id => byId(id)) &&
+    new URLSearchParams(location.search).get('vista') === 'demo') {
   byId('preview-note').hidden = false;
   byId('weather-icon').textContent = '🌤️';
   byId('weather-temperature').textContent = '21°';

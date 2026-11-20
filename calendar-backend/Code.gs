@@ -148,11 +148,16 @@ function handleBookingRequest_(e) {
   try {
     const p = (e && e.parameter) || {};
     if (p.website) return page('No se pudo procesar la solicitud.');
+    const identity = verifyCustomer_(String(p.idToken || ''));
+    if (!identity || identity.uid !== String(p.clienteUid || '') ||
+        identity.email !== String(p.email || '').trim().toLowerCase()) {
+      return page('No se pudo verificar tu sesión. Volvé a ingresar con tu mail antes de reservar.');
+    }
     const nombre = String(p.nombre || '').trim();
     const telefono = String(p.telefono || '').trim();
     const servicio = String(p.servicio || '').trim();
     const id = String(p.requestId || '');
-    if (!nombre || nombre.length > 80 || !/^[+() 0-9-]{7,25}$/.test(telefono) ||
+    if (!nombre || nombre.length > 80 || /[\r\n]/.test(nombre) || !/^[+() 0-9-]{7,25}$/.test(telefono) ||
         servicio.length > 100 || !/^[a-f0-9-]{36}$/i.test(id)) {
       return page('Revisá el nombre, teléfono y tratamiento antes de enviar.');
     }
@@ -186,17 +191,22 @@ function handleBookingRequest_(e) {
     if (!locked) return page('Hay otra reserva en proceso. Esperá unos segundos y volvé a enviar.');
     const calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
     if (!calendar) return page('No se pudo acceder a la agenda. No se confirmó ningún turno.');
-    const events = calendar.getEvents(start, end);
     const marker = 'OASIS_REQUEST:' + id;
-    if (events.some(event => event.getDescription().split('\n').includes(marker)))
-      return page('Tu solicitud ya había quedado registrada en este horario. No se creó un turno duplicado.');
+    const prior = calendar.getEvents(new Date(Date.now() - 365 * 86400000),
+      new Date(Date.now() + (CONFIG.maxDaysAhead + 1) * 86400000), {search: marker});
+    if (prior.some(event => String(event.getDescription() || '').split('\n').includes(marker)))
+      return page('Tu solicitud ya había quedado registrada. No se creó un turno duplicado.');
+    const events = calendar.getEvents(start, end);
     if (events.length)
       return page('Ese horario está ocupado o bloqueado. No se guardó la reserva; elegí otro horario.');
-    const requestedDeposit = Number(String(p.montoSena || '').replace(',', '.'));
+    const requestedDeposit = getRequestedDepositAmount_();
     const depositText = Number.isFinite(requestedDeposit) && requestedDeposit > 0 && requestedDeposit <= 100000000
       ? '$ ' + requestedDeposit.toLocaleString('es-AR') : 'a confirmar';
+    const receiptUrl = saveReceipt_(String(p.comprobanteImagen || ''), id, identity.uid);
     calendar.createEvent('Turno web · ' + servicio, start, end, {
       description: marker + '\nCliente: ' + nombre + '\nTeléfono: ' + telefono +
+        '\nCliente UID: ' + identity.uid + '\nCliente email: ' + identity.email +
+        (receiptUrl ? '\nComprobante: ' + receiptUrl : '\nComprobante: no adjuntado') +
         '\nTratamiento: ' + servicio + '\nSeña solicitada: ' + depositText + '\nSeña recibida: pendiente de verificar' + '\nEstado: pendiente de confirmación del centro.'
     });
     return page('Solicitud registrada en la agenda para el ' + p.fecha + ' a las ' + p.hora +
@@ -209,6 +219,44 @@ function handleBookingRequest_(e) {
   }
 }
 
+function getRequestedDepositAmount_() {
+  try {
+    const response = UrlFetchApp.fetch(
+      'https://firestore.googleapis.com/v1/projects/oasysbeautycenter/databases/(default)/documents/configuracionPublica/senas',
+      {muteHttpExceptions: true});
+    if (response.getResponseCode() !== 200) return NaN;
+    const field = (JSON.parse(response.getContentText()).fields || {}).amount || {};
+    return Number(field.doubleValue || field.integerValue);
+  } catch (error) { return NaN; }
+}
+
+function saveReceipt_(encoded, reference, uid) {
+  if (!encoded) return '';
+  if (encoded.length > 1550000 || !/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(encoded))
+    throw new Error('invalid_receipt');
+  const bytes = Utilities.base64Decode(encoded.slice('data:image/jpeg;base64,'.length));
+  if (bytes.length < 4 || bytes.length > 1200000 ||
+      (bytes[0] & 255) !== 255 || (bytes[1] & 255) !== 216 || (bytes[2] & 255) !== 255)
+    throw new Error('invalid_receipt');
+  const properties = PropertiesService.getScriptProperties();
+  let folderId = properties.getProperty('OASIS_RECEIPTS_FOLDER_ID');
+  let folder;
+  if (folderId) folder = DriveApp.getFolderById(folderId);
+  else {
+    // Newly created Drive folders are private; do not enable link sharing.
+    folder = DriveApp.createFolder('OASYS - Comprobantes privados');
+    properties.setProperty('OASIS_RECEIPTS_FOLDER_ID', folder.getId());
+  }
+  const files = folder.getFilesByName(reference + '.jpg');
+  if (files.hasNext()) {
+    const file = files.next();
+    if (file.getDescription() !== 'OASIS_OWNER:' + uid || files.hasNext()) throw new Error('receipt_conflict');
+    return file.getUrl();
+  }
+  const file = folder.createFile(Utilities.newBlob(bytes, 'image/jpeg', reference + '.jpg'));
+  file.setDescription('OASIS_OWNER:' + uid);
+  return file.getUrl();
+}
 
 // Availability, schedule and service administration share this published web app.
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
@@ -223,7 +271,7 @@ const DEFAULT_STATUS_COLORS = {
   unavailable: '#E5E7EB',
   available: '#FFFFFF',
   busy: '#FECACA',
-  taken: '#BFDBFE'
+  taken: '#FCA5A5'
 };
 
 function doGetAvailability_(e) {
@@ -267,6 +315,15 @@ function handleAdminPost_(e) {
   const params = e.parameter || {};
   const action = String(params.action || '');
   const email = verifyAdmin_(String(params.idToken || ''));
+  if (action === 'portalConfirmReceipt') {
+    const nonce = String(params.nonce || '');
+    if (!email) return receiptResult_(nonce, {ok: false, error: 'unauthorized'});
+    try {
+      return receiptResult_(nonce, confirmReceipt_(params));
+    } catch (error) {
+      return receiptResult_(nonce, {ok: false, error: 'confirmation_failed'});
+    }
+  }
   const resultType = action === 'saveServices' ? 'oasis-services-save'
     : action === 'saveSchedule' ? 'oasis-schedule-save' : 'oasis-service-agenda';
   if (!email) return postResult_(false, 'No se pudo verificar la cuenta administradora.', resultType);
@@ -332,6 +389,106 @@ function handleAdminPost_(e) {
   return postResult_(true, 'Horario guardado.', 'oasis-schedule-save');
 }
 
+// A manual receipt is authoritative only after the verified admin saved its
+// immutable ledger record. Read it with that admin's token (Firestore rules apply).
+function confirmReceipt_(params) {
+  const reference = String(params.requestId || '');
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(reference))
+    return {ok: false, error: 'invalid_reference'};
+  const response = UrlFetchApp.fetch(
+    'https://firestore.googleapis.com/v1/projects/oasysbeautycenter/databases/(default)/documents/senasRecibidas/' + reference,
+    {headers: {Authorization: 'Bearer ' + String(params.idToken || '')}, muteHttpExceptions: true}
+  );
+  if (response.getResponseCode() !== 200) return {ok: false, error: 'deposit_record_unavailable'};
+  const fields = JSON.parse(response.getContentText()).fields || {};
+  const amount = Number(fields.monto && (fields.monto.doubleValue || fields.monto.integerValue));
+  const customer = String(fields.cliente && fields.cliente.stringValue || '');
+  const savedReference = String(fields.referencia && fields.referencia.stringValue || '');
+  const normalizedName = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es-AR');
+  if (savedReference !== reference || !Number.isFinite(amount) || amount <= 0 || amount > 100000000 ||
+      amount !== Number(params.amount) || !customer || normalizedName(customer) !== normalizedName(params.customerName))
+    return {ok: false, error: 'deposit_record_mismatch'};
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return {ok: false, error: 'busy'};
+  try {
+    const calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
+    if (!calendar) return {ok: false, error: 'calendar_unavailable'};
+    const marker = 'OASIS_REQUEST:' + reference;
+    const now = Date.now();
+    const events = calendar.getEvents(new Date(now - 365 * 86400000),
+      new Date(now + (CONFIG.maxDaysAhead + 1) * 86400000), {search: marker})
+      .filter(event => String(event.getDescription() || '').split('\n').includes(marker));
+    if (events.length !== 1) return {ok: false, error: events.length ? 'ambiguous_reference' : 'reservation_not_found'};
+    const event = events[0];
+    const description = String(event.getDescription() || '');
+    const nameLine = description.split('\n').find(line => line.startsWith('Cliente: '));
+    if (!nameLine || normalizedName(nameLine.slice(9)) !== normalizedName(customer))
+      return {ok: false, error: 'customer_mismatch'};
+    const confirmed = 'OASIS_DEPOSIT_CONFIRMED:' + reference + ':' + amount;
+    const prior = description.split('\n').find(line => line.startsWith('OASIS_DEPOSIT_CONFIRMED:'));
+    if (prior && prior !== confirmed) return {ok: false, error: 'confirmation_conflict'};
+    const lines = description.split('\n').filter(line =>
+      !line.startsWith('Seña recibida:') && !line.startsWith('OASIS_DEPOSIT_CONFIRMED:') && !line.startsWith('Estado:'));
+    lines.push('Seña recibida: $ ' + amount.toLocaleString('es-AR') + ' (verificada manualmente por el centro)',
+      'Estado: turno confirmado por el centro.', confirmed);
+    // Setters are safe to repeat after a partial failure; never add another payment.
+    event.setDescription(lines.join('\n'));
+    event.setTitle('Turno tomado · ' + serviceNameFromEvent_(event));
+    event.setColor(CalendarApp.EventColor.RED);
+    const notifications = sendConfirmationEmails_(event, reference, customer, amount);
+    return {ok: true, reference, notifications};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Called while holding the booking lock, after the manual ledger is verified.
+// Persist intent before sending. An interrupted send is uncertain and must be
+// reconciled by the admin rather than automatically sending duplicate messages.
+function sendConfirmationEmails_(event, reference, customer, amount) {
+  const properties = PropertiesService.getScriptProperties();
+  const key = 'OASIS_CONFIRM_EMAILS_' + reference;
+  const states = JSON.parse(properties.getProperty(key) || '{}');
+  const line = String(event.getDescription() || '').split('\n').find(value => value.startsWith('Cliente email: '));
+  const customerEmail = line ? line.slice(15).trim() : '';
+  const recipients = {client: customerEmail, admin: ADMIN_EMAILS[0]};
+  const date = Utilities.formatDate(event.getStartTime(), TIME_ZONE, 'dd/MM/yyyy HH:mm');
+  const body = 'Turno confirmado en OASYS Beauty Center.\n\nCliente: ' + customer +
+    '\nTratamiento: ' + serviceNameFromEvent_(event) + '\nFecha y hora: ' + date +
+    ' (Argentina)\nSeña verificada por el centro: $ ' + amount.toLocaleString('es-AR') +
+    '\nReferencia: ' + reference + '\n\nTu horario quedó reservado.';
+  for (const [role, address] of Object.entries(recipients)) {
+    if (states[role] === 'sent' || states[role] === 'sending' || states[role] === 'uncertain') continue;
+    if (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(address)) {
+      states[role] = 'missing_email';
+      properties.setProperty(key, JSON.stringify(states));
+      continue;
+    }
+    try {
+      if (MailApp.getRemainingDailyQuota() < 1) {
+        states[role] = 'quota_pending';
+        properties.setProperty(key, JSON.stringify(states));
+        continue;
+      }
+      states[role] = 'sending';
+      properties.setProperty(key, JSON.stringify(states));
+      MailApp.sendEmail({to: address, subject: 'Turno confirmado — OASYS Beauty Center', body, name: 'OASYS Beauty Center'});
+      states[role] = 'sent';
+      properties.setProperty(key, JSON.stringify(states));
+    } catch (error) {
+      states[role] = states[role] === 'sending' ? 'uncertain' : 'retry_pending';
+      properties.setProperty(key, JSON.stringify(states));
+    }
+  }
+  return states.client === 'sent' && states.admin === 'sent' ? 'sent' : 'pending_review';
+}
+
+function receiptResult_(nonce, result) {
+  const payload = JSON.stringify({source: 'oasys-calendar', nonce, result}).replace(/</g, '\\u003c');
+  return HtmlService.createHtmlOutput('<!doctype html><meta charset="utf-8"><script>parent.postMessage(' +
+    payload + ', "https://scantec77-diag.github.io");</script>');
+}
+
 function getAdminServiceAgenda_() {
   const calendar = CalendarApp.getCalendarById(CONFIG.calendarId);
   if (!calendar) throw new Error('calendar_unavailable');
@@ -340,7 +497,7 @@ function getAdminServiceAgenda_() {
   const start = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
   const end = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
   const ledger = getCompletedServiceLedger_();
-  const appointments = calendar.getEvents(start, end)
+  const bookings = calendar.getEvents(start, end)
     .map(event => {
       const description = event.getDescription() || '';
       const service = serviceNameFromEvent_(event);
@@ -352,12 +509,32 @@ function getAdminServiceAgenda_() {
         description,
         done: description.includes('OASIS_SERVICE_DONE:') || Boolean(ledger.eventIds[event.getId()])
       };
-    })
-    .filter(item => item.description.includes('OASIS_REQUEST:') && item.service && !item.done && new Date(item.end) <= now)
+    }).filter(item => item.description.includes('OASIS_REQUEST:') && item.service);
+  const appointments = bookings
+    .filter(item => !item.done && new Date(item.end) <= now)
     .map(({ id, service, start }) => ({ id, service, start }))
     .sort((a, b) => a.start.localeCompare(b.start));
 
-  return { counts: ledger.counts, appointments };
+  const properties = PropertiesService.getScriptProperties();
+  const pendingBookings = bookings.map(item => {
+    const read = prefix => {
+      const line = item.description.split('\n').find(value => value.startsWith(prefix));
+      return line ? line.slice(prefix.length).trim() : '';
+    };
+    const reference = read('OASIS_REQUEST:');
+    const confirmed = Boolean(read('OASIS_DEPOSIT_CONFIRMED:'));
+    const emails = JSON.parse(properties.getProperty('OASIS_CONFIRM_EMAILS_' + reference) || '{}');
+    const notificationsSent = emails.client === 'sent' && emails.admin === 'sent';
+    const receipt = read('Comprobante: ');
+    const amountLine = read(confirmed ? 'Seña recibida: ' : 'Seña solicitada: ');
+    const amountMatch = amountLine.match(/^\$\s*([0-9.,]+)/);
+    const amount = amountMatch ? Number(amountMatch[1].replace(/\./g, '').replace(',', '.')) : null;
+    return {reference, customer: read('Cliente: '), service: item.service, start: item.start,
+      receiptUrl: /^https:\/\/drive\.google\.com\//.test(receipt) ? receipt : '', amount,
+      confirmed, notificationsSent};
+  }).filter(item => !item.confirmed || !item.notificationsSent)
+    .sort((a, b) => a.start.localeCompare(b.start));
+  return { counts: ledger.counts, appointments, pendingBookings };
 }
 
 function markServiceDone_(eventId) {
@@ -422,21 +599,29 @@ function serviceNameFromEvent_(event) {
   return String(event.getTitle() || '').replace(/^Turno web\s*[·-]\s*/i, '').trim();
 }
 
-function verifyAdmin_(idToken) {
-  if (!idToken || idToken.length > 10000) return '';
+// Identity Toolkit validates the token against this Firebase project. Fail closed:
+// never accept identity fields or decoded JWT claims supplied by the browser.
+function verifyCustomer_(idToken) {
+  if (!idToken || idToken.length > 10000) return null;
   try {
     const response = UrlFetchApp.fetch(
       'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + encodeURIComponent(FIREBASE_WEB_API_KEY),
       { method: 'post', contentType: 'application/json', payload: JSON.stringify({ idToken }), muteHttpExceptions: true }
     );
-    if (response.getResponseCode() !== 200) return '';
+    if (response.getResponseCode() !== 200) return null;
     const data = JSON.parse(response.getContentText());
     const user = data.users && data.users[0];
     const email = String(user && user.email || '').trim().toLowerCase();
-    return user && user.emailVerified && ADMIN_EMAILS.includes(email) ? email : '';
+    return user && user.emailVerified === true && user.localId && email && !user.disabled
+      ? {uid: String(user.localId), email} : null;
   } catch (error) {
-    return '';
+    return null;
   }
+}
+
+function verifyAdmin_(idToken) {
+  const identity = verifyCustomer_(idToken);
+  return identity && ADMIN_EMAILS.includes(identity.email) ? identity.email : '';
 }
 
 function getSchedule_() {
@@ -447,7 +632,7 @@ function getSchedule_() {
       if (Array.isArray(value.days) && value.openTime && value.closeTime) {
         value.secondOpenTime = value.secondOpenTime || '';
         value.secondCloseTime = value.secondCloseTime || '';
-        value.statusColors = { ...DEFAULT_STATUS_COLORS, ...(value.statusColors || {}) };
+        value.statusColors = { ...DEFAULT_STATUS_COLORS, ...(value.statusColors || {}), taken: DEFAULT_STATUS_COLORS.taken };
         return value;
       }
     } catch (error) {}

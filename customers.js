@@ -13,6 +13,13 @@ const app = initializeApp({
 });
 const auth = getAuth(app);
 auth.languageCode = 'es';
+export async function getBookingIdToken(uid) {
+  const user = auth.currentUser;
+  if (!user || !user.emailVerified || user.uid !== uid) throw new Error('customer-session-changed');
+  const token = await user.getIdToken();
+  if (auth.currentUser !== user) throw new Error('customer-session-changed');
+  return token;
+}
 // Target: Firestore Native/Standard, (default). Verify edition before deployment.
 const db = getFirestore(app);
 const profileRef = user => doc(db, 'clientesWeb', user.uid);

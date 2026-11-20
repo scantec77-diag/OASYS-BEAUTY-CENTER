@@ -16,6 +16,11 @@ const enabled = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec
 let customer = null;
 let requestId = '';
 let receiptEncoded = false;
+let sending = false;
+const tokenInput = document.createElement('input');
+tokenInput.type = 'hidden';
+tokenInput.name = 'idToken';
+booking.append(tokenInput);
 submit.disabled = true;
 
 function compressReceipt(file) {
@@ -58,6 +63,7 @@ receiptFile?.addEventListener('change', () => {
 
 document.addEventListener('oasis:customer', event => {
   customer = event.detail;
+  tokenInput.value = '';
   requestId = '';
   document.getElementById('nombre').value = customer?.nombre || '';
   document.getElementById('telefono').value = customer?.telefono || '';
@@ -74,30 +80,42 @@ if (enabled) {
   result.textContent = 'Reservas en preparación: falta activar la conexión con la agenda.';
 }
 booking.addEventListener('input', () => { requestId = ''; });
+booking.addEventListener('change', () => { requestId = ''; });
 booking.addEventListener('submit', async event => {
-  if (!enabled || !customer) { event.preventDefault(); return; }
-  if (!booking.reportValidity()) { event.preventDefault(); return; }
-  if (receiptFile?.files?.[0] && !receiptEncoded) {
-    event.preventDefault();
-    submit.disabled = true;
-    receiptStatus.textContent = 'Preparando la foto…';
-    try {
-      receiptData.value = await compressReceipt(receiptFile.files[0]);
-      receiptEncoded = true;
-    } catch (error) {
-      receiptStatus.textContent = error.message || 'No se pudo preparar la foto.';
-      submit.disabled = false;
-      return;
+  event.preventDefault();
+  if (!enabled || !customer || sending || !booking.reportValidity()) return;
+  sending = true;
+  submit.disabled = true;
+  const session = customer;
+  try {
+    if (receiptFile?.files?.[0] && !receiptEncoded) {
+      receiptStatus.textContent = 'Preparando la foto…';
+      try {
+        receiptData.value = await compressReceipt(receiptFile.files[0]);
+        receiptEncoded = true;
+      } catch (error) {
+        receiptStatus.textContent = error.message || 'No se pudo preparar la foto.';
+        return;
+      }
     }
-    submit.disabled = false;
-    booking.requestSubmit(submit);
-    return;
+    const { getBookingIdToken } = await import('./customers.js');
+    const token = await getBookingIdToken(session.uid);
+    if (customer !== session) throw new Error('customer-session-changed');
+    if (!booking.reportValidity()) return;
+    tokenInput.value = token;
+    const name = document.getElementById('nombre');
+    const service = document.getElementById('servicio');
+    name.value = name.value.trim();
+    service.value = service.value.trim();
+    if (!requestId) requestId = crypto.randomUUID();
+    document.getElementById('requestId').value = requestId;
+    result.textContent = 'Consultá el resultado en la pestaña que se abre. Este mensaje no confirma la reserva. Si falla, reenviá sin modificar los datos.';
+    HTMLFormElement.prototype.submit.call(booking);
+  } catch (error) {
+    result.textContent = 'No se pudo verificar tu sesión. Volvé a ingresar con tu mail y reintentá; no se envió la reserva.';
+  } finally {
+    tokenInput.value = '';
+    sending = false;
+    submit.disabled = !enabled || !customer;
   }
-  const name = document.getElementById('nombre');
-  const service = document.getElementById('servicio');
-  name.value = name.value.trim();
-  service.value = service.value.trim();
-  if (!requestId) requestId = crypto.randomUUID();
-  document.getElementById('requestId').value = requestId;
-  result.textContent = 'Consultá el resultado en la pestaña que se abre. Este mensaje no confirma la reserva. Si falla, reenviá sin modificar los datos.';
 });

@@ -1,5 +1,5 @@
 import { AVAILABILITY_ENDPOINT } from './app-config.js';
-const { addDoc, collection, doc, getDocFromServer, getDocsFromServer, query, serverTimestamp, setDoc, where } =
+const { addDoc, collection, doc, getDocsFromServer, query, runTransaction, serverTimestamp, where } =
   await import('https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js');
 
 const depositElement = document.getElementById('stats-deposits');
@@ -7,6 +7,7 @@ const manualElement = document.getElementById('stats-manual-income');
 const totalElement = document.getElementById('stats-total-income');
 const completedList = document.getElementById('services-completed-list');
 const adminList = document.getElementById('admin-completion-list');
+const pendingBookingsList = document.getElementById('admin-pending-bookings');
 const adminStatus = document.getElementById('admin-completion-status');
 const frame = document.getElementById('oasis-completed-services-frame');
 const paymentButton = document.getElementById('admin-manual-payment-button');
@@ -28,6 +29,7 @@ const validEndpoint = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+
 let adminSession = window.oasisAdminSession || null;
 let pendingAction = '';
 let pendingNonce = '';
+let actionGeneration = 0;
 
 function buenosAiresDayKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -109,7 +111,7 @@ document.getElementById('admin-confirm-deposit-close')?.addEventListener('click'
 });
 depositForm?.addEventListener('submit', async event => {
   event.preventDefault();
-  if (!depositForm.reportValidity()) return;
+  if (depositSave.disabled || !depositForm.reportValidity()) return;
   const reference = depositReference.value.trim();
   const client = depositClient.value.trim().replace(/\s+/g, ' ');
   const amount = Number(depositAmount.value);
@@ -136,25 +138,26 @@ depositForm?.addEventListener('submit', async event => {
   depositStatus.textContent = 'Guardando la seña recibida…';
   try {
     const depositRef = doc(db, 'senasRecibidas', reference);
-    const existing = await getDocFromServer(depositRef);
-    if (existing.exists()) {
-      const saved = existing.data();
-      if (String(saved.cliente || '').trim().toLocaleLowerCase('es-AR') !== client.toLocaleLowerCase('es-AR') ||
-          Number(saved.monto) !== amount) {
-        depositStatus.textContent = 'Esa referencia ya tiene una seña con otros datos. Revisá la reserva antes de continuar.';
-        return;
+    await runTransaction(db, async transaction => {
+      const existing = await transaction.get(depositRef);
+      if (existing.exists()) {
+        const saved = existing.data();
+        if (String(saved.cliente || '').trim().toLocaleLowerCase('es-AR') !== client.toLocaleLowerCase('es-AR') ||
+            Number(saved.monto) !== amount) {
+          throw new Error('deposit-record-mismatch');
+        }
+      } else {
+        transaction.set(depositRef, {
+          referencia: reference,
+          cliente: client,
+          monto: amount,
+          dayKey: buenosAiresDayKey(),
+          createdAt: serverTimestamp(),
+          createdBy: email
+        });
       }
-    } else {
-      await setDoc(depositRef, {
-        referencia: reference,
-        cliente: client,
-        monto: amount,
-        dayKey: buenosAiresDayKey(),
-        createdAt: serverTimestamp(),
-        createdBy: email
-      });
-      await refreshDeposits();
-    }
+    });
+    await refreshDeposits();
     const nonce = crypto.randomUUID();
     if (!sendAdminAction('portalConfirmReceipt', {
       requestId: reference, customerName: client, amount, nonce
@@ -164,7 +167,9 @@ depositForm?.addEventListener('submit', async event => {
     }
     depositStatus.textContent = 'Seña guardada. Actualizando el turno en Calendar…';
   } catch (error) {
-    depositStatus.textContent = error?.code === 'permission-denied'
+    depositStatus.textContent = error?.message === 'deposit-record-mismatch'
+      ? 'Esa referencia ya tiene una seña con otros datos. Revisá la reserva antes de continuar.'
+      : error?.code === 'permission-denied'
       ? 'Firebase rechazó el registro. Publicá las reglas actualizadas de Firestore.'
       : 'No se pudo guardar la seña. Revisá la conexión y volvé a intentar.';
   } finally {
@@ -310,12 +315,55 @@ function renderAdminAppointments(appointments) {
   }
 }
 
+function renderPendingBookings(bookings) {
+  pendingBookingsList.replaceChildren();
+  if (!bookings?.length) {
+    pendingBookingsList.textContent = 'No hay solicitudes pendientes de revisión.';
+    return;
+  }
+  const format = new Intl.DateTimeFormat('es-AR', {dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires'});
+  for (const booking of bookings) {
+    const row = document.createElement('div');
+    row.className = 'admin-completion-row';
+    const text = document.createElement('p');
+    text.textContent = booking.customer + ' · ' + booking.service + ' · ' + format.format(new Date(booking.start)) +
+      (booking.confirmed ? ' · Turno confirmado; revisar correos' : ' · Pendiente de revisar pago');
+    row.append(text);
+    if (/^https:\/\/drive\.google\.com\//.test(booking.receiptUrl || '')) {
+      const receipt = document.createElement('a');
+      receipt.href = booking.receiptUrl;
+      receipt.target = '_blank';
+      receipt.rel = 'noopener noreferrer';
+      receipt.textContent = 'Ver comprobante';
+      row.append(receipt);
+    } else {
+      const note = document.createElement('span');
+      note.textContent = 'Sin comprobante adjunto';
+      row.append(note);
+    }
+    const review = document.createElement('button');
+    review.type = 'button';
+    review.className = 'secondary';
+    review.textContent = booking.confirmed ? 'Revisar confirmación' : 'Revisar y confirmar seña';
+    review.addEventListener('click', () => {
+      depositButton.click();
+      depositReference.value = booking.reference;
+      depositClient.value = booking.customer;
+      depositAmount.value = Number.isFinite(booking.amount) && booking.amount > 0 ? booking.amount : '';
+      depositStatus.textContent = 'Verificá que el dinero esté acreditado antes de confirmar la seña.';
+    });
+    row.append(review);
+    pendingBookingsList.append(row);
+  }
+}
+
 function sendAdminAction(action, extra = {}) {
   if (pendingAction || !validEndpoint || !adminSession?.idToken) return false;
   pendingAction = action;
   pendingNonce = String(extra.nonce || '');
+  const generation = ++actionGeneration;
   window.setTimeout(() => {
-    if (pendingAction === action) {
+    if (pendingAction === action && generation === actionGeneration) {
       pendingAction = '';
       pendingNonce = '';
       if (action === 'portalConfirmReceipt') depositStatus.textContent = 'Calendar tardó en responder. Volvé a intentar con la misma referencia y el mismo importe.';
@@ -361,9 +409,13 @@ window.addEventListener('message', event => {
     pendingNonce = '';
     if (action === 'portalConfirmReceipt') {
       if (result.ok) {
-        depositStatus.textContent = 'Comprobante confirmado. El turno quedó verde en Calendar.';
-        depositForm.reset();
+        depositStatus.textContent = result.notifications === 'sent'
+          ? 'Turno tomado en rojo. Se enviaron los correos al cliente y a la administradora.'
+          : 'Turno tomado en rojo. Hay correos pendientes de revisión; no vuelvas a registrar el pago.';
+        if (result.notifications === 'sent') depositForm.reset();
         refreshDeposits();
+        refreshAdminAgenda();
+        document.dispatchEvent(new Event('oasis:booking-updated'));
       } else {
         depositStatus.textContent = 'La seña quedó guardada, pero Calendar no pudo confirmar el turno (' +
           String(result.error || 'error') + '). Corregí el dato si hace falta y volvé a intentar.';
@@ -371,7 +423,7 @@ window.addEventListener('message', event => {
     }
     return;
   }
-  if (event.data?.type !== 'oasis-service-agenda') return;
+  if (event.data?.type !== 'oasis-service-agenda' || pendingAction === 'portalConfirmReceipt') return;
   const wasMarking = pendingAction === 'markServiceDone';
   pendingAction = '';
   pendingNonce = '';
@@ -379,11 +431,15 @@ window.addEventListener('message', event => {
   if (!event.data.ok) return;
   renderCompletedCounts(event.data.data?.counts || {});
   renderAdminAppointments(event.data.data?.appointments || []);
+  renderPendingBookings(event.data.data?.pendingBookings || []);
   if (wasMarking) window.setTimeout(refreshAdminAgenda, 350);
 });
 
 document.addEventListener('oasis:admin-auth', event => {
   adminSession = event.detail || null;
+  actionGeneration++;
+  pendingAction = '';
+  pendingNonce = '';
   if (depositButton) depositButton.hidden = !adminSession;
   if (adminSession?.idToken) {
     refreshAdminAgenda();
@@ -401,6 +457,7 @@ document.addEventListener('oasis:admin-auth', event => {
     depositElement.dataset.value = '';
     depositElement.textContent = '$ —';
     adminList.replaceChildren();
+    pendingBookingsList.replaceChildren();
     renderCompletedCounts({});
   }
 });

@@ -17,7 +17,7 @@ const secondShiftFields = document.getElementById('availability-second-shift-fie
 const secondOpenInput = document.getElementById('availability-open-time-2');
 const secondCloseInput = document.getElementById('availability-close-time-2');
 const frame = document.getElementById('oasis-schedule-save-frame');
-const defaultColors = { unavailable: '#E5E7EB', available: '#FFFFFF', busy: '#FECACA', taken: '#BFDBFE' };
+const defaultColors = { unavailable: '#E5E7EB', available: '#FFFFFF', busy: '#FECACA', taken: '#FCA5A5' };
 const defaultSchedule = { days: [], openTime: '09:00', closeTime: '21:00', secondOpenTime: '', secondCloseTime: '', statusColors: { ...defaultColors } };
 const todayParts = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Argentina/Buenos_Aires',
@@ -72,7 +72,7 @@ function applyStatusColors(colors = defaultColors) {
   root.style.setProperty('--status-unavailable', colors.unavailable || defaultColors.unavailable);
   root.style.setProperty('--status-available', colors.available || defaultColors.available);
   root.style.setProperty('--status-busy', colors.busy || defaultColors.busy);
-  root.style.setProperty('--status-taken', colors.taken || defaultColors.taken);
+  root.style.setProperty('--status-taken', defaultColors.taken);
 }
 
 function renderMonth() {
@@ -396,3 +396,7 @@ renderMonth();
 renderEditor();
 renderDay();
 loadSettings();
+
+// Refresh the visible day after manual approval and when returning from payment.
+document.addEventListener('oasis:booking-updated', refreshSelectedDay);
+window.addEventListener('focus', () => { if (!document.hidden) refreshSelectedDay(); });

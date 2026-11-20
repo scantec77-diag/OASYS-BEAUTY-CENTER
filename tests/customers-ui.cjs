@@ -3,12 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const assert = require('node:assert/strict');
 (async () => {
- const browser = await chromium.launch({headless:true});
+ const browser = await chromium.launch({headless:true, executablePath:process.env.CHROMIUM_EXECUTABLE_PATH || undefined});
  const page = await browser.newPage({viewport:{width:390,height:844}});
  const base = path.resolve(__dirname,'..');
  await page.route('**/*', async route => {
   const u = new URL(route.request().url());
   if (u.hostname !== 'oasis.test') return route.abort();
+  if (u.pathname === '/app-config.js') return route.fulfill({contentType:'text/javascript',body:"export const APPS_SCRIPT_ENDPOINT = ''; export const AVAILABILITY_ENDPOINT = ''; export const WEB_PUSH_VAPID_KEY = '';"});
   if (u.pathname === '/customer-config.js') return route.fulfill({contentType:'text/javascript',body:'export const CUSTOMERS_ENABLED = true;'});
   if (u.pathname === '/customers.js') return route.fulfill({contentType:'text/javascript', body:`
    import {mountCustomers} from './customer-ui.js';
@@ -25,6 +26,7 @@ const assert = require('node:assert/strict');
     watchUser:cb=>{window.test.watch=cb;cb(null);},
     logout:()=>window.test.logout(),
     getProfile:async user=>{if(window.test.failRead) throw {code:'permission-denied'}; return profiles.get(user.uid)||null;},
+    getLegacyProfile:async()=>null,
     createProfile:async(user,data)=>{if(window.test.failSave) throw {code:'unavailable'};if(!profiles.has(user.uid)){profiles.set(user.uid,{...data,email:user.email});window.test.writes++;}return profiles.get(user.uid);}
    });`});
   const name = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
@@ -61,6 +63,7 @@ const assert = require('node:assert/strict');
  assert.equal(await visible('#customer-profile'),false);
  assert.equal(await visible('#customer-ready'),true);
  assert.equal(await page.evaluate(()=>window.test.writes),1);
+ await page.locator('#customer-new').click();
  await page.evaluate(()=>window.test.login('other@example.com','two'));
  assert.equal(await visible('#customer-profile'),true);
  assert.equal(await page.locator('#nombre').inputValue(),'');
@@ -81,7 +84,7 @@ const assert = require('node:assert/strict');
  assert.equal(await page.evaluate(()=>location.search),'');
  await page.locator('#customer-send').click();
  assert.equal(await page.evaluate(()=>window.test.sent),1);
- await page.goto('https://oasis.test/?oobCode=valid');
+ await page.goto('https://oasis.test/?oobCode=valid&customerFlow=new');
  await page.waitForFunction(()=>window.test);
  await page.locator('#customer-email').fill('ari@example.com');
  await page.locator('#customer-send').click();

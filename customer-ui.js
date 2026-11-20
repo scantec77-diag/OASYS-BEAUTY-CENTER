@@ -11,6 +11,7 @@ export function mountCustomers(api) {
     const firstName = String(data?.nombre || '').trim().split(/\s+/)[0];
     const greetingElement = el('welcome-greeting');
     const noteElement = el('welcome-note');
+    if (!welcomeCard || !greetingElement || !noteElement) return;
     if (!firstName) {
       greetingElement.textContent = 'Te damos la bienvenida';
       noteElement.textContent = 'Ingresá con tu mail para ver tu saludo personal';

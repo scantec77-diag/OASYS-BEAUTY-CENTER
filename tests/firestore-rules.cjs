@@ -1,0 +1,48 @@
+const { initializeTestEnvironment, assertSucceeds, assertFails } = require('@firebase/rules-unit-testing');
+const { doc, setDoc, getDoc, getDocs, collection, updateDoc, deleteDoc, serverTimestamp } = require('firebase/firestore');
+const fs = require('node:fs');
+(async () => {
+ const env = await initializeTestEnvironment({projectId:'demo-oasys-security',firestore:{host:'127.0.0.1',port:8080,rules:fs.readFileSync('firestore.customers.rules','utf8')}});
+ try {
+  const db = (uid,email,verified=true) => env.authenticatedContext(uid,{email,email_verified:verified}).firestore();
+  const owner=db('ari','ari@example.com'), other=db('other','other@example.com'), unverified=db('ari','ari@example.com',false);
+  const admin=db('admin','oasysbeautycenter@gmail.com'), anon=env.unauthenticatedContext().firestore();
+  const profile = {uid:'ari',email:'ari@example.com',nombre:'Ari',telefono:'1122334455',createdAt:serverTimestamp()};
+  await assertFails(setDoc(doc(anon,'clientesWeb/ari'),profile));
+  await assertFails(setDoc(doc(unverified,'clientesWeb/ari'),profile));
+  await assertFails(setDoc(doc(other,'clientesWeb/ari'),profile));
+  await assertFails(setDoc(doc(owner,'clientesWeb/ari'),{...profile,role:'admin'}));
+  await assertFails(setDoc(doc(owner,'clientesWeb/ari'),{...profile,email:'other@example.com'}));
+  await assertSucceeds(setDoc(doc(owner,'clientesWeb/ari'),profile));
+  await assertSucceeds(getDoc(doc(owner,'clientesWeb/ari')));
+  await assertFails(getDoc(doc(other,'clientesWeb/ari')));
+  await assertFails(getDoc(doc(anon,'clientesWeb/ari')));
+  await assertFails(getDocs(collection(owner,'clientesWeb')));
+  await assertFails(updateDoc(doc(owner,'clientesWeb/ari'),{nombre:'Otro'}));
+  await assertFails(deleteDoc(doc(owner,'clientesWeb/ari')));
+  const legacy={email:'ari@example.com',nombre:'Ari',telefono:'1122334455',createdAt:serverTimestamp()};
+  await assertSucceeds(setDoc(doc(admin,'clientesPorEmail/ari@example.com'),legacy));
+  await assertSucceeds(getDoc(doc(owner,'clientesPorEmail/ari@example.com')));
+  await assertFails(getDoc(doc(other,'clientesPorEmail/ari@example.com')));
+  await assertFails(setDoc(doc(owner,'clientesPorEmail/ari@example.com'),legacy));
+  const config={amount:5000,walletName:'',accountHolder:'',alias:'',cbuCvu:'',paymentLink:'',updatedAt:serverTimestamp(),updatedBy:'oasysbeautycenter@gmail.com'};
+  await assertSucceeds(setDoc(doc(admin,'configuracionPublica/senas'),config));
+  await assertSucceeds(getDoc(doc(anon,'configuracionPublica/senas')));
+  await assertFails(setDoc(doc(owner,'configuracionPublica/senas'),config));
+  await assertFails(getDocs(collection(anon,'configuracionPublica')));
+  const id='11111111-1111-4111-8111-111111111111';
+  const deposit={referencia:id,cliente:'Ari',monto:5000,dayKey:'2026-11-19',createdAt:serverTimestamp(),createdBy:'oasysbeautycenter@gmail.com'};
+  await assertFails(setDoc(doc(owner,'senasRecibidas/'+id),deposit));
+  await assertSucceeds(setDoc(doc(admin,'senasRecibidas/'+id),deposit));
+  await assertFails(setDoc(doc(admin,'senasRecibidas/'+id),deposit));
+  await assertSucceeds(getDocs(collection(admin,'senasRecibidas')));
+  await assertFails(getDoc(doc(owner,'senasRecibidas/'+id)));
+  const payment={monto:1000,dayKey:'2026-11-19',createdAt:serverTimestamp(),createdBy:'oasysbeautycenter@gmail.com'};
+  await assertSucceeds(setDoc(doc(admin,'pagosManuales/one'),payment));
+  await assertFails(setDoc(doc(admin,'pagosManuales/bad'),{...payment,monto:-1}));
+  await assertFails(setDoc(doc(unverified,'pagosManuales/two'),payment));
+  await assertFails(getDoc(doc(anon,'pagosManuales/one')));
+  await assertFails(setDoc(doc(admin,'unknown/one'),{anything:true}));
+  console.log('PASS: 30 Firestore permission and data-validation checks in demo emulator.');
+ } finally { await env.cleanup(); }
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -256,7 +256,7 @@ if (!normalizedAdmins.length) {
       return;
     }
     const email = String(user.email || '').trim().toLowerCase();
-    if (!normalizedAdmins.includes(email)) {
+    if (!user.emailVerified || !normalizedAdmins.includes(email)) {
       await signOut(auth);
       showSignedOut('Esa cuenta de Google no tiene permisos de administrador.');
       return;
