@@ -135,7 +135,8 @@ form?.addEventListener('submit', async event => {
   save.disabled = true;
   formStatus.textContent = 'Guardando la seña y los datos de la billetera…';
   try {
-    await setDoc(doc(window.oasisAdminServices?.db || publicDb, 'configuracionPublica', 'senas'), value);
+    // Preserve the legacy WhatsApp templates when editing payment instructions.
+    await setDoc(doc(window.oasisAdminServices?.db || publicDb, 'configuracionPublica', 'senas'), value, {merge: true});
     renderPublicSettings(value);
     formStatus.textContent = 'Seña guardada. El importe y los datos de pago aparecen en la reserva.';
   } catch (error) {

@@ -43,3 +43,25 @@ Para reproducir: Node >=22.21, Java 21, `npm ci`, `npm test`, `npm run test:rule
 6. Conservar versiones anteriores y exportar reglas/configuración antes de desplegar. Rollback coordinado frontend/backend; no restaurar las reglas fuente corruptas.
 
 No se desplegó, no se habilitaron clientes y no se modificó producción. Quedan revisión visual/móvil, configuración desplegada, notificaciones push, cancelación/liberación de horarios, retención/limpieza de comprobantes y conciliación operativa de correos inciertos. La prueba integral se realiza al finalizar los cambios, según lo pedido por Ari.
+
+
+## Segunda tanda: integración con reglas activas
+
+Se recuperó íntegramente desde la consola la versión marcada activa del 27/10/2026, 22:03 según la interfaz. La copia de referencia queda en `tests/fixtures/firestore.active-2026-10-27.rules` **solo para pruebas/comparación; nunca desplegar ese fixture**. La fuente integrada para publicar sigue siendo `firestore.customers.rules`, mediante `firebase.customers.json`.
+
+Se preservaron explícitamente las funciones de `settings/weeklySchedule`, `bookings` y `adminNotificationTokens` que faltaban en la primera tanda. También se conserva el formato antiguo de configuración de seña (alias y campos opcionales), junto con el formulario completo actual. Al guardar datos de pago se usa merge para conservar las plantillas WhatsApp existentes.
+
+Cambios intencionales de seguridad respecto de la versión activa:
+
+- `bookings`: ya no se permite crear reservas sin sesión ni desde una cuenta de cliente. Es una vía antigua sin UID de propietario; queda para administración verificada. Las reservas públicas del frontend actual pasan por Apps Script autenticado. Una versión antigua que escriba directamente aquí debe migrarse antes del despliegue.
+- El administrador puede crear, consultar, corregir datos de contacto y confirmar reservas antiguas, pero no cambiar precios, fechas ni timestamps originales. No se permite volver de confirmado a pendiente mediante una actualización de estado; cancelación/reembolso requieren su flujo propio.
+- Se validan ambas franjas horarias, tipos, orden y ausencia de superposición. La versión activa omitía validaciones de la segunda franja. Se redujo la evaluación por día para respetar el límite de expresiones de Firestore, manteniendo los siete días y todas las validaciones.
+- Las plantillas WhatsApp, antes sin comprobación de tipo, deben ser strings de hasta 4000 caracteres. Los links de pago son HTTPS o vacíos.
+- Los tokens de notificaciones mantienen escritura/borrado solo de admin verificado y lectura de navegador denegada. No se modificaron destinos ni se enviaron notificaciones.
+- `clientes` y `turnos` continúan denegadas por defecto, tal como en las reglas activas recuperadas. El código de esta rama usa `clientesWeb`/`clientesPorEmail` y Calendar; no se abrió acceso genérico a colecciones de esquema desconocido.
+
+La compatibilidad de horarios/precios de la colección antigua no sincroniza esos datos con Apps Script: siguen siendo modelos distintos que hay que identificar en el despliegue.
+
+Validación final de integración: **30 comprobaciones del modelo de clientes/pagos + 86 reproducciones/regresiones en emulador**, todas aprobadas. Dentro de las 86 se reprodujeron tres problemas de la copia activa en el entorno demo y se comprobó su rechazo en la integración. Se probaron consultas reales por dayKey usadas por el panel, clientes propios/ajenos/anónimos, administrador sin correo verificado, mutaciones de campos inmutables, esquemas extra/incompletos, horarios inválidos y válidos de siete días, tokens y conservación de plantillas. No se usaron cuentas, documentos ni pagos de producción.
+
+Las reglas integradas siguen siendo una propuesta que necesita validación del flujo desplegado. **No se publicaron en Firebase ni se habilitó el proveedor de mail.** Para el siguiente paso se requiere autorizar la publicación de esta versión integrada en el proyecto correcto; luego probar Auth, horarios, reservas y correos con cuentas de prueba. La publicación modifica permisos de acceso de los nuevos perfiles, por lo que no se confunde la autorización de integración con la de despliegue.

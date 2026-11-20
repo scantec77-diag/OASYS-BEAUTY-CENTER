@@ -1,0 +1,177 @@
+// Data model: bookings/{YYYY-MM-DD_HHmm} stores reservation fields and private customer details.
+// settings/weeklySchedule stores only public opening days and hours.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOasysAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'oasysbeautycenter@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function validPrice(serviceKey, amount) {
+      return (serviceKey == 'semi_permanente' && amount == 30000)
+        || (serviceKey == 'capping_gel' && amount == 35000)
+        || (serviceKey == 'capping_acrygel' && amount == 40000)
+        || (serviceKey == 'esculpidas_cortas' && amount == 45000)
+        || (serviceKey == 'esculpidas_largas' && amount == 50000)
+        || (serviceKey == 'pedicuria' && amount == 30000)
+        || (serviceKey == 'pedicuria_semi' && amount == 35000)
+        || (serviceKey == 'limpieza_facial' && amount == 50000)
+        || (serviceKey == 'lifting_pestanas' && amount == 25000)
+        || (serviceKey == 'remocion_con_precio' && amount == 15000)
+        || (serviceKey == 'remocion_a_confirmar' && amount == 0);
+    }
+    function validDeposit(serviceKey, amount) {
+      return ((serviceKey == 'remocion_con_precio'
+          || serviceKey == 'remocion_a_confirmar') && amount == 0)
+        || (serviceKey != 'remocion_con_precio'
+          && serviceKey != 'remocion_a_confirmar' && amount == 10000);
+    }
+    function validTime(value) {
+      return value is string
+        && (value == '' || value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'));
+    }
+    function validDay(day) {
+      return day is map
+        && day.keys().hasAll(['enabled', 'start1', 'end1', 'start2', 'end2'])
+        && day.keys().hasOnly(['enabled', 'start1', 'end1', 'start2', 'end2'])
+        && day.enabled is bool
+        && validTime(day.start1) && validTime(day.end1)
+        && true
+        && (!day.enabled || (day.start1 != '' && day.end1 != '' && day.start1 < day.end1))
+        && ((day.start2 == '' && day.end2 == '')
+          || (true
+            ));
+    }
+    function validSchedule(data) {
+      return data.keys().hasAll(['days', 'updatedAt'])
+        && data.keys().hasOnly(['days', 'updatedAt'])
+        && data.days is map
+        && data.days.keys().hasAll(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+        && data.days.keys().hasOnly(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'])
+        && validDay(data.days.sun) && validDay(data.days.mon)
+        && validDay(data.days.tue) && validDay(data.days.wed)
+        && validDay(data.days.thu) && validDay(data.days.fri)
+        && validDay(data.days.sat)
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+    function validBooking(bookingId) {
+      let d = request.resource.data;
+      return d.keys().hasAll([
+          'customerName', 'customerPhone', 'serviceKey', 'dateKey', 'timeKey',
+          'appointmentAt', 'priceARS', 'depositARS', 'status', 'createdAt'
+        ])
+        && d.keys().hasOnly([
+          'customerName', 'customerPhone', 'serviceKey', 'dateKey', 'timeKey',
+          'appointmentAt', 'priceARS', 'depositARS', 'status', 'createdAt'
+        ])
+        && d.customerName is string
+        && d.customerName.size() >= 1 && d.customerName.size() <= 80
+        && d.customerPhone is string
+        && d.customerPhone.size() >= 8 && d.customerPhone.size() <= 24
+        && d.customerPhone.matches('^[+0-9() -]{8,24}$')
+        && d.serviceKey is string && d.serviceKey.size() <= 32
+        && d.dateKey is string && d.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.timeKey is string && d.timeKey.matches('^([01][0-9]|2[0-3])[0-5][0-9]$')
+        && bookingId == d.dateKey + '_' + d.timeKey
+        && d.appointmentAt is timestamp
+        && d.appointmentAt >= request.time
+        && d.appointmentAt <= request.time + duration.value(365, 'd')
+        && d.priceARS is int && d.priceARS >= 0 && d.priceARS <= 500000
+        && validPrice(d.serviceKey, d.priceARS)
+        && d.depositARS is int && validDeposit(d.serviceKey, d.depositARS)
+        && d.status == 'pending'
+        && d.createdAt is timestamp && d.createdAt == request.time;
+    }
+
+    function validAdminBookingUpdate() {
+      let d = request.resource.data;
+      return isOasysAdmin()
+        && d.keys().hasAll([
+          'customerName', 'customerPhone', 'serviceKey', 'dateKey', 'timeKey',
+          'appointmentAt', 'priceARS', 'depositARS', 'status', 'createdAt'
+        ])
+        && d.keys().hasOnly([
+          'customerName', 'customerPhone', 'serviceKey', 'dateKey', 'timeKey',
+          'appointmentAt', 'priceARS', 'depositARS', 'status', 'createdAt', 'adminNotes'
+        ])
+        && d.diff(resource.data).affectedKeys().hasOnly([
+          'customerName', 'customerPhone', 'status', 'adminNotes'
+        ])
+        && d.customerName is string
+        && d.customerName.size() >= 1 && d.customerName.size() <= 80
+        && d.customerPhone is string
+        && d.customerPhone.size() >= 8 && d.customerPhone.size() <= 24
+        && d.customerPhone.matches('^[+0-9() -]{8,24}$')
+        && d.status in ['pending', 'confirmed']
+        && (!('adminNotes' in d)
+          || (d.adminNotes is string && d.adminNotes.size() <= 500));
+    }
+
+
+    match /bookings/{bookingId} {
+      allow create: if validBooking(bookingId);
+      allow read: if isOasysAdmin();
+      allow update: if validAdminBookingUpdate();
+      allow delete: if isOasysAdmin();
+    }
+    match /settings/weeklySchedule {
+      allow read: if true;
+      allow create, update: if isOasysAdmin() && validSchedule(request.resource.data);
+    }
+    match /configuracionPublica/senas {
+      allow get: if true;
+      allow create, update: if isOasysAdmin()
+        && request.resource.data.keys().hasAll(['alias'])
+        && request.resource.data.keys().hasOnly([
+          'alias', 'amount', 'walletName', 'accountHolder',
+          'cbuCvu', 'paymentLink', 'updatedAt', 'updatedBy',
+          'whatsappConfirmationTemplate', 'whatsappReminderTemplate'
+        ])
+        && request.resource.data.alias is string
+        && request.resource.data.alias.size() >= 1
+        && request.resource.data.alias.size() <= 80
+        && (!('amount' in request.resource.data)
+          || (request.resource.data.amount is number
+            && request.resource.data.amount > 0
+            && request.resource.data.amount <= 100000000))
+        && (!('walletName' in request.resource.data)
+          || (request.resource.data.walletName is string
+            && request.resource.data.walletName.size() <= 60))
+        && (!('accountHolder' in request.resource.data)
+          || (request.resource.data.accountHolder is string
+            && request.resource.data.accountHolder.size() <= 100))
+        && (!('cbuCvu' in request.resource.data)
+          || (request.resource.data.cbuCvu is string
+            && request.resource.data.cbuCvu.size() <= 40))
+        && (!('paymentLink' in request.resource.data)
+          || (request.resource.data.paymentLink is string
+            && request.resource.data.paymentLink.size() <= 500
+            && (request.resource.data.paymentLink == ''
+              || request.resource.data.paymentLink.matches('^https://.*'))))
+        && (!('updatedBy' in request.resource.data)
+          || (request.resource.data.updatedBy is string
+            && request.resource.data.updatedBy == request.auth.token.email))
+        && (!('updatedAt' in request.resource.data)
+          || (request.resource.data.updatedAt is timestamp
+            && request.resource.data.updatedAt == request.time));    }
+
+    match /adminNotificationTokens/{tokenId} {
+      // Only the verified Oasys admin can register or revoke push destinations.
+      allow read: if false;
+      allow create, update: if isOasysAdmin()
+        && request.resource.data.keys().hasAll(['token', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 0
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isOasysAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

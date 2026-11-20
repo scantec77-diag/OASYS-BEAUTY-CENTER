@@ -1,4 +1,5 @@
-// Prototype for the default Firestore database; confirm its edition and deploy rules before use.
+// Integrated prototype for (default). Review and validate before deployment.
+// Includes the active 2026-10-27 rules plus the corrected customer/payment model.
 // Data model:
 // clientesWeb/{uid}: uid, email, nombre (1..80), telefono (7..25), createdAt.
 //   Customers can only create and read their own verified profile; no list/update/delete.
@@ -8,6 +9,15 @@
 // senasRecibidas/{reservation UUID}: referencia, cliente, monto, dayKey, createdAt, createdBy; verified Oasis admin only.
 // pagosManuales/{paymentId}: monto (0..100,000,000), dayKey (YYYY-MM-DD), createdAt, createdBy.
 //   Only verified Oasis admins can read or create these payment records.
+// bookings/{YYYY-MM-DD_HHmm}: legacy reservation schema (name/phone/service/time/
+//   prices/status/createdAt; optional adminNotes <=500). Verified admin only.
+// settings/weeklySchedule: public days map (seven bounded day entries) and updatedAt.
+// adminNotificationTokens/{tokenId}: private push token <=4096 and updatedAt;
+//   verified admin can write/delete, browser reads remain forbidden.
+// configuracionPublica/senas also accepts the old alias-only shape and optional
+//   WhatsApp templates <=4000; all public fields are payment instructions/templates.
+// Other legacy collections (including clientes and turnos) remain denied, as in
+//   the active source. No broad admin wildcard is introduced.
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -82,16 +92,25 @@ service cloud.firestore {
     }
 
     function isValidDepositConfig(data) {
-      return data.keys().hasAll(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
-        && data.keys().hasOnly(['amount','walletName','accountHolder','alias','cbuCvu','paymentLink','updatedAt','updatedBy'])
-        && data.amount is number && data.amount > 0 && data.amount <= 100000000
-        && data.walletName is string && data.walletName.size() <= 60
-        && data.accountHolder is string && data.accountHolder.size() <= 100
+      return data.keys().hasAll(['alias'])
+        && data.keys().hasOnly(['amount','walletName','accountHolder','alias','cbuCvu',
+          'paymentLink','updatedAt','updatedBy','whatsappConfirmationTemplate','whatsappReminderTemplate'])
         && data.alias is string && data.alias.size() <= 80
-        && data.cbuCvu is string && data.cbuCvu.size() <= 40
-        && data.paymentLink is string && data.paymentLink.size() <= 500
-        && data.updatedAt == request.time
-        && data.updatedBy == request.auth.token.email.lower();
+        && (data.alias.size() > 0 || data.keys().hasAll([
+          'amount','walletName','accountHolder','cbuCvu','paymentLink','updatedAt','updatedBy']))
+        && (!('amount' in data) || (data.amount is number && data.amount > 0 && data.amount <= 100000000))
+        && (!('walletName' in data) || (data.walletName is string && data.walletName.size() <= 60))
+        && (!('accountHolder' in data) || (data.accountHolder is string && data.accountHolder.size() <= 100))
+        && (!('cbuCvu' in data) || (data.cbuCvu is string && data.cbuCvu.size() <= 40))
+        && (!('paymentLink' in data) || (data.paymentLink is string && data.paymentLink.size() <= 500
+          && (data.paymentLink == '' || data.paymentLink.matches('^https://.*'))))
+        && (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt == request.time))
+        && (!('updatedBy' in data) || (data.updatedBy is string
+          && data.updatedBy == request.auth.token.email.lower()))
+        && (!('whatsappConfirmationTemplate' in data) || (data.whatsappConfirmationTemplate is string
+          && data.whatsappConfirmationTemplate.size() <= 4000))
+        && (!('whatsappReminderTemplate' in data) || (data.whatsappReminderTemplate is string
+          && data.whatsappReminderTemplate.size() <= 4000));
     }
 
     function isValidReceivedDeposit(data, depositId) {
@@ -126,6 +145,122 @@ service cloud.firestore {
       allow get, list: if isOasisAdmin();
       allow create: if isOasisAdmin() && isValidManualPayment(request.resource.data);
       allow update, delete: if false;
+    }
+
+    function validLegacyPrice(serviceKey, amount) {
+      return (serviceKey == 'semi_permanente' && amount == 30000)
+        || (serviceKey == 'capping_gel' && amount == 35000)
+        || (serviceKey == 'capping_acrygel' && amount == 40000)
+        || (serviceKey == 'esculpidas_cortas' && amount == 45000)
+        || (serviceKey == 'esculpidas_largas' && amount == 50000)
+        || (serviceKey == 'pedicuria' && amount == 30000)
+        || (serviceKey == 'pedicuria_semi' && amount == 35000)
+        || (serviceKey == 'limpieza_facial' && amount == 50000)
+        || (serviceKey == 'lifting_pestanas' && amount == 25000)
+        || (serviceKey == 'remocion_con_precio' && amount == 15000)
+        || (serviceKey == 'remocion_a_confirmar' && amount == 0);
+    }
+
+    function validLegacyDeposit(serviceKey, amount) {
+      return ((serviceKey == 'remocion_con_precio' || serviceKey == 'remocion_a_confirmar') && amount == 0)
+        || (serviceKey != 'remocion_con_precio' && serviceKey != 'remocion_a_confirmar' && amount == 10000);
+    }
+
+    function isValidLegacyBooking(data, bookingId) {
+      return data.keys().hasAll(['customerName','customerPhone','serviceKey','dateKey','timeKey',
+          'appointmentAt','priceARS','depositARS','status','createdAt'])
+        && data.keys().hasOnly(['customerName','customerPhone','serviceKey','dateKey','timeKey',
+          'appointmentAt','priceARS','depositARS','status','createdAt','adminNotes'])
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 80
+        && data.customerPhone is string && data.customerPhone.size() >= 8 && data.customerPhone.size() <= 24
+        && data.customerPhone.matches('^[+0-9() -]{8,24}$')
+        && data.serviceKey is string && data.serviceKey.size() <= 32
+        && data.dateKey is string && data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.timeKey is string && data.timeKey.matches('^([01][0-9]|2[0-3])[0-5][0-9]$')
+        && bookingId == data.dateKey + '_' + data.timeKey
+        && data.appointmentAt is timestamp && data.createdAt is timestamp
+        && data.priceARS is int && data.priceARS >= 0 && data.priceARS <= 500000
+        && validLegacyPrice(data.serviceKey, data.priceARS)
+        && data.depositARS is int && validLegacyDeposit(data.serviceKey, data.depositARS)
+        && data.status in ['pending','confirmed']
+        && (!('adminNotes' in data) || (data.adminNotes is string && data.adminNotes.size() <= 500));
+    }
+
+    function isValidLegacyBookingCreate(data, bookingId) {
+      return isValidLegacyBooking(data, bookingId)
+        && !('adminNotes' in data)
+        && data.status == 'pending' && data.createdAt == request.time
+        && data.appointmentAt >= request.time
+        && data.appointmentAt <= request.time + duration.value(365, 'd');
+    }
+
+    function isValidLegacyBookingUpdate(data, bookingId) {
+      return isValidLegacyBooking(data, bookingId)
+        && data.diff(resource.data).affectedKeys().hasOnly(['customerName','customerPhone','status','adminNotes'])
+        && (data.status == resource.data.status || (resource.data.status == 'pending' && data.status == 'confirmed'));
+    }
+
+    function isValidLegacyDay(day) {
+      let enabled = day.enabled;
+      let start1 = day.start1;
+      let end1 = day.end1;
+      let start2 = day.start2;
+      let end2 = day.end2;
+      // One regex validates four bounded times. '/' cannot occur in HH:mm, so
+      // the delimiters cannot be forged by shifting text between fields.
+      let times = start1 + '/' + end1 + '/' + start2 + '/' + end2;
+      return day is map
+        // All five required fields are accessed; exact size also excludes extras.
+        && day.size() == 5
+        && enabled is bool
+        && start1 is string && end1 is string && start2 is string && end2 is string
+        && times.matches('^(([01][0-9]|2[0-3]):[0-5][0-9])?/(([01][0-9]|2[0-3]):[0-5][0-9])?/(([01][0-9]|2[0-3]):[0-5][0-9])?/(([01][0-9]|2[0-3]):[0-5][0-9])?$')
+        && (!enabled || (start1 != '' && end1 != '' && start1 < end1))
+        && ((start2 == '' && end2 == '') || (start2 != '' && end2 != ''
+          && start2 < end2 && (end1 == '' || end1 <= start2)));
+    }
+
+    function isValidLegacySchedule(data) {
+      let days = data.days;
+      return data.size() == 2
+        && days is map
+        // All seven day maps are unconditionally validated below.
+        && days.size() == 7
+        && isValidLegacyDay(days.sun) && isValidLegacyDay(days.mon)
+        && isValidLegacyDay(days.tue) && isValidLegacyDay(days.wed)
+        && isValidLegacyDay(days.thu) && isValidLegacyDay(days.fri)
+        && isValidLegacyDay(days.sat)
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidNotificationToken(data) {
+      return data.keys().hasAll(['token','updatedAt']) && data.keys().hasOnly(['token','updatedAt'])
+        && data.token is string && data.token.size() > 0 && data.token.size() <= 4096
+        && data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    match /bookings/{bookingId} {
+      // The current public booking flow goes through authenticated Apps Script.
+      // Legacy documents remain manageable by admin; direct anonymous creates stop here.
+      allow create: if isOasisAdmin() && isValidLegacyBookingCreate(request.resource.data, bookingId);
+      allow read: if isOasisAdmin();
+      allow update: if isOasisAdmin() && isValidLegacyBookingUpdate(request.resource.data, bookingId);
+      allow delete: if isOasisAdmin();
+    }
+
+    match /settings/weeklySchedule {
+      // Preserve the existing public opening-hours document (no customer data).
+      allow read: if true;
+      // One guarded write predicate avoids evaluating seven days twice for the
+      // combined create/update permission. Deletes are explicitly excluded.
+      allow write: if request.method in ['create','update']
+        && isOasisAdmin() && isValidLegacySchedule(request.resource.data);
+    }
+
+    match /adminNotificationTokens/{tokenId} {
+      allow read: if false;
+      allow create, update: if isOasisAdmin() && isValidNotificationToken(request.resource.data);
+      allow delete: if isOasisAdmin();
     }
 
     match /{document=**} {

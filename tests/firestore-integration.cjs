@@ -1,0 +1,111 @@
+const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
+const {doc,setDoc,getDoc,getDocs,collection,updateDoc,deleteDoc,serverTimestamp,Timestamp,query,where,deleteField}=require('firebase/firestore');
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+let checks=0;
+const allow=async p=>{await assertSucceeds(p);checks++;};
+const deny=async p=>{await assertFails(p);checks++;};
+const projectId='demo-oasys-security';
+const options=rules=>({projectId,firestore:{host:'127.0.0.1',port:8080,rules:fs.readFileSync(rules,'utf8')}});
+const identity=(env,uid,email,verified=true)=>env.authenticatedContext(uid,{email,email_verified:verified}).firestore();
+const day={enabled:true,start1:'09:00',end1:'13:00',start2:'14:00',end2:'18:00'};
+const schedule=changed=>({days:Object.fromEntries(['sun','mon','tue','wed','thu','fri','sat'].map(k=>[k,{...day,...changed}])),updatedAt:serverTimestamp()});
+const date=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+const bookingId=date+'_1000';
+const booking=()=>({customerName:'Cliente de prueba',customerPhone:'1122334455',serviceKey:'semi_permanente',dateKey:date,timeKey:'1000',appointmentAt:Timestamp.fromDate(new Date(date+'T10:00:00-03:00')),priceARS:30000,depositARS:10000,status:'pending',createdAt:serverTimestamp()});
+(async()=>{
+ // Reproduce only against the local demo emulator, never against the real project.
+ let env=await initializeTestEnvironment(options('tests/fixtures/firestore.active-2026-10-27.rules'));
+ try{
+  await env.clearFirestore();
+  const anon=env.unauthenticatedContext().firestore(),admin=identity(env,'admin','oasysbeautycenter@gmail.com');
+  await allow(setDoc(doc(anon,'bookings/'+bookingId),booking()));
+  await allow(setDoc(doc(admin,'settings/weeklySchedule'),schedule({start2:'invalid',end2:{bad:true}})));
+  await allow(setDoc(doc(admin,'configuracionPublica/senas'),{alias:'oasis.prueba',whatsappConfirmationTemplate:42}));
+  console.log('Reproduced in local emulator: active snapshot accepts anonymous legacy reservation, invalid second shift and untyped WhatsApp template.');
+ }finally{await env.cleanup();}
+ env=await initializeTestEnvironment(options('firestore.customers.rules'));
+ try{
+  await env.clearFirestore();
+  const admin=identity(env,'admin','oasysbeautycenter@gmail.com'),other=identity(env,'other','other@example.com');
+  const unverified=identity(env,'admin','oasysbeautycenter@gmail.com',false),anon=env.unauthenticatedContext().firestore();
+  const ref=db=>doc(db,'bookings/'+bookingId);
+  await deny(setDoc(ref(anon),booking()));
+  await deny(setDoc(ref(other),booking()));
+  await deny(setDoc(ref(unverified),booking()));
+  await allow(setDoc(ref(admin),booking()));
+  await allow(getDoc(ref(admin)));
+  await allow(getDocs(collection(admin,'bookings')));
+  await deny(getDoc(ref(anon)));await deny(getDoc(ref(other)));
+  await deny(getDocs(collection(other,'bookings')));
+  await allow(updateDoc(ref(admin),{customerName:'Nombre corregido',adminNotes:'Validado por el centro'}));
+  await deny(updateDoc(ref(admin),{customerName:'x'.repeat(5000)}));
+  await deny(updateDoc(ref(admin),{customerPhone:42}));
+  await deny(updateDoc(ref(admin),{customerPhone:deleteField()}));
+  await deny(updateDoc(ref(admin),{adminNotes:'x'.repeat(501)}));
+  await deny(updateDoc(ref(admin),{role:'admin'}));
+  await deny(updateDoc(ref(admin),{priceARS:35000}));
+  await deny(updateDoc(ref(admin),{createdAt:serverTimestamp()}));
+  await deny(updateDoc(ref(admin),{appointmentAt:Timestamp.fromMillis(Date.now())}));
+  await deny(updateDoc(ref(other),{status:'confirmed'}));
+  await allow(updateDoc(ref(admin),{status:'confirmed'}));
+  await deny(updateDoc(ref(admin),{status:'pending'}));
+  await deny(deleteDoc(ref(other)));await allow(deleteDoc(ref(admin)));
+  await deny(setDoc(ref(admin),{...booking(),role:'admin'}));
+  await deny(setDoc(ref(admin),{...booking(),createdAt:Timestamp.fromMillis(1)}));
+  await allow(setDoc(doc(admin,'settings/weeklySchedule'),schedule()));
+  await allow(getDoc(doc(anon,'settings/weeklySchedule')));
+  await allow(setDoc(doc(admin,'settings/weeklySchedule'),schedule()));
+  await deny(setDoc(doc(admin,'settings/weeklySchedule'),{...schedule(),days:{...schedule().days,mon:{...day,extra:true}}}));
+  const missing=schedule();delete missing.days.mon.start2;await deny(setDoc(doc(admin,'settings/weeklySchedule'),missing));
+  const missingDay=schedule();delete missingDay.days.mon;await deny(setDoc(doc(admin,'settings/weeklySchedule'),missingDay));
+  await deny(deleteDoc(doc(admin,'settings/weeklySchedule')));
+  await deny(getDoc(doc(anon,'settings/private')));
+  await deny(getDocs(collection(anon,'settings')));
+  await deny(setDoc(doc(other,'settings/weeklySchedule'),schedule()));
+  for(const changed of [{start2:'invalid',end2:{bad:true}},{start2:'19:00',end2:'14:00'},{start2:'12:00',end2:'18:00'},{start2:'14:00',end2:''},{start1:'x'.repeat(10000)}]){
+   await deny(setDoc(doc(admin,'settings/weeklySchedule'),schedule(changed)));
+  }
+  await deny(setDoc(doc(admin,'settings/weeklySchedule'),{...schedule(),extra:true}));
+  await deny(setDoc(doc(admin,'settings/weeklySchedule'),{...schedule(),updatedAt:Timestamp.fromMillis(1)}));
+  await allow(setDoc(doc(admin,'settings/weeklySchedule'),schedule({enabled:false,start1:'',end1:'',start2:'',end2:''})));
+  await allow(setDoc(doc(admin,'configuracionPublica/senas'),{alias:'oasis.prueba'}));
+  await allow(getDoc(doc(anon,'configuracionPublica/senas')));
+  await allow(updateDoc(doc(admin,'configuracionPublica/senas'),{whatsappConfirmationTemplate:'Hola {nombre}',whatsappReminderTemplate:'Recordá tu turno'}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{whatsappConfirmationTemplate:42}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{whatsappReminderTemplate:'x'.repeat(4001)}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{paymentLink:'javascript:alert(1)'}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{paymentLink:'http://example.com'}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{amount:-1}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{updatedBy:'other@example.com'}));
+  await deny(updateDoc(doc(admin,'configuracionPublica/senas'),{updatedAt:Timestamp.fromMillis(1)}));
+  await deny(setDoc(doc(admin,'configuracionPublica/senas'),{alias:''}));
+  await deny(setDoc(doc(admin,'configuracionPublica/senas'),{amount:1000}));
+  await allow(setDoc(doc(admin,'configuracionPublica/senas'),{alias:'',amount:5000,walletName:'',accountHolder:'',cbuCvu:'',paymentLink:'https://example.com/pagar',updatedBy:'oasysbeautycenter@gmail.com',updatedAt:serverTimestamp()},{merge:true}));
+  assert.equal((await getDoc(doc(admin,'configuracionPublica/senas'))).data().whatsappConfirmationTemplate,'Hola {nombre}');checks++;
+  await deny(setDoc(doc(unverified,'configuracionPublica/senas'),{alias:'oasis.prueba'}));
+  const token=()=>({token:'fictional-push-token',updatedAt:serverTimestamp()});
+  await allow(setDoc(doc(admin,'adminNotificationTokens/test-device'),token()));
+  await allow(setDoc(doc(admin,'adminNotificationTokens/test-device'),token()));
+  await deny(getDoc(doc(admin,'adminNotificationTokens/test-device')));
+  await deny(getDocs(collection(admin,'adminNotificationTokens')));
+  await deny(getDoc(doc(anon,'adminNotificationTokens/test-device')));
+  await deny(setDoc(doc(other,'adminNotificationTokens/bad'),token()));
+  await deny(setDoc(doc(unverified,'adminNotificationTokens/bad'),token()));
+  await deny(setDoc(doc(admin,'adminNotificationTokens/bad'),{...token(),token:'x'.repeat(4097)}));
+  await deny(updateDoc(doc(admin,'adminNotificationTokens/test-device'),{token:42}));
+  await deny(deleteDoc(doc(other,'adminNotificationTokens/test-device')));
+  await allow(deleteDoc(doc(admin,'adminNotificationTokens/test-device')));
+  for(const path of ['clientes/test','turnos/test','clientesWeb/other/nested/doc','unknown/doc']){
+   await deny(getDoc(doc(anon,path)));await deny(setDoc(doc(admin,path),{nombre:'Prueba'}));
+  }
+  const id='11111111-1111-4111-8111-111111111111';
+  await allow(setDoc(doc(admin,'senasRecibidas/'+id),{referencia:id,cliente:'Cliente de prueba',monto:5000,dayKey:date,createdAt:serverTimestamp(),createdBy:'oasysbeautycenter@gmail.com'}));
+  await allow(getDocs(query(collection(admin,'senasRecibidas'),where('dayKey','==',date))));
+  await deny(getDocs(query(collection(other,'senasRecibidas'),where('dayKey','==',date))));
+  await allow(setDoc(doc(admin,'pagosManuales/test'),{monto:1000,dayKey:date,createdAt:serverTimestamp(),createdBy:'oasysbeautycenter@gmail.com'}));
+  await allow(getDocs(query(collection(admin,'pagosManuales'),where('dayKey','==',date))));
+  await deny(getDocs(query(collection(anon,'pagosManuales'),where('dayKey','==',date))));
+  console.log(`PASS: ${checks} baseline reproduction + integrated permission/data/query checks. Emulator only; production unchanged.`);
+ }finally{await env.cleanup();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

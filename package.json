@@ -6,7 +6,7 @@
   "engines": {"node": ">=22.21.0"},
   "scripts": {
     "test": "node tests/booking-backend.cjs && node tests/receipts-backend.cjs && node tests/customers-dom.cjs && node tests/booking-dom.cjs && node tests/statistics-dom.cjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-oasys-security --config firebase.customers.json \"node tests/firestore-rules.cjs\"",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-oasys-security --config firebase.customers.json \"node tests/firestore-rules.cjs && node tests/firestore-integration.cjs\"",
     "test:browser": "node tests/customers-ui.cjs"
   },
   "devDependencies": {
